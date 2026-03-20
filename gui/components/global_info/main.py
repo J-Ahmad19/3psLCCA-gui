@@ -127,6 +127,13 @@ GENERAL_FIELDS = [
         "text",
         doc_slug="project_currency",
     ),
+    FieldDef(
+        "unit_system",
+        "Unit System",
+        "Measurement unit system (Metric or Imperial). Set at project creation.",
+        "text",
+        doc_slug="unit-system",
+    ),
     # FieldDef(
     #     "currency_to_usd_rate",
     #     "Exchange Rate to USD",
@@ -144,7 +151,7 @@ class GeneralInfo(ScrollableForm):
 
     created = Signal()
 
-    _LOCKED = {"project_country", "project_currency"}
+    _LOCKED = {"project_country", "project_currency", "unit_system"}
 
     def __init__(self, controller=None):
         super().__init__(controller=controller, chunk_name="general_info")
@@ -210,6 +217,17 @@ class GeneralInfo(ScrollableForm):
 
     def validate(self):
         return validate_form(GENERAL_FIELDS, self)
+
+    _UNIT_SYSTEM_LABELS = {
+        "metric":   "Metric SI",
+        "imperial": "Imperial (English)",
+    }
+
+    def load_data_dict(self, data: dict):
+        raw = data.get("unit_system", "metric")
+        display = self._UNIT_SYSTEM_LABELS.get(raw, raw)
+        data = {**data, "unit_system": display}
+        super().load_data_dict(data)
 
     def get_data(self) -> dict:
         return {"chunk": "general_info", "data": self.get_data_dict()}

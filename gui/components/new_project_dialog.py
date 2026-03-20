@@ -29,8 +29,14 @@ def _combo_error_style(widget: QComboBox) -> str:
 from .utils.countries_data import CURRENCIES, COUNTRIES
 
 
+_UNIT_SYSTEMS = [
+    ("Metric (SI)",          "metric"),
+    ("Imperial (English)",   "imperial"),
+]
+
+
 class NewProjectDialog(QDialog):
-    """Collect project name, country, and currency before creating a project."""
+    """Collect project name, country, currency, and unit system before creating a project."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -95,6 +101,21 @@ class NewProjectDialog(QDialog):
         currency_hint.setEnabled(False)
         layout.addWidget(currency_hint)
 
+        layout.addSpacing(4)
+
+        # ── Unit System ───────────────────────────────────────────────────
+        layout.addWidget(QLabel("<b>Unit System</b>"))
+
+        self.unit_system_input = QComboBox()
+        self.unit_system_input.setFixedHeight(34)
+        for label, value in _UNIT_SYSTEMS:
+            self.unit_system_input.addItem(label, value)
+        layout.addWidget(self.unit_system_input)
+
+        unit_hint = QLabel("Cannot be changed after project creation.")
+        unit_hint.setEnabled(False)
+        layout.addWidget(unit_hint)
+
         layout.addSpacing(8)
 
         # ── Buttons ───────────────────────────────────────────────────────
@@ -129,3 +150,6 @@ class NewProjectDialog(QDialog):
 
     def get_currency(self) -> str:
         return self.currency_input.currentData() or ""
+
+    def get_unit_system(self) -> str:
+        return self.unit_system_input.currentData() or "metric"

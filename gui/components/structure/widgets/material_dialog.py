@@ -36,7 +36,7 @@ from ...utils.definitions import (
     SI_BASE_UNITS,
     UNIT_DISPLAY,
 )
-from ...utils.unit_resolver import get_custom_units, load_custom_units
+from ...utils.unit_resolver import get_custom_units, load_custom_units, _UNIT_ALIASES as _SOR_UNIT_ALIASES
 from ...utils.input_fields.add_material import FIELD_DEFINITIONS, BASE_DOCS_URL
 
 
@@ -373,12 +373,6 @@ class CustomUnitDialog(QDialog):
 # SOR / registry helpers
 # ---------------------------------------------------------------------------
 
-_SOR_UNIT_ALIASES: dict[str, str] = {
-    "rmt": "rm",
-    "lmt": "rm",
-    "sqmt": "sqm",
-    "t":   "tonne",
-}
 
 def _unit_sym(code: str) -> str:
     """

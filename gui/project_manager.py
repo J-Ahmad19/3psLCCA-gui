@@ -57,6 +57,7 @@ class ProjectManager:
         display_name = None
         country = None
         currency = None
+        unit_system = None
         if is_new:
             from gui.components.new_project_dialog import NewProjectDialog
 
@@ -66,6 +67,7 @@ class ProjectManager:
             display_name = dialog.get_name()
             country = dialog.get_country()
             currency = dialog.get_currency()
+            unit_system = dialog.get_unit_system()
 
         # Find or create a window
         target = self._find_empty_window() or self._create_window()
@@ -87,6 +89,7 @@ class ProjectManager:
                         "project_name": display_name,
                         "project_country": country,
                         "project_currency": currency,
+                        "unit_system": unit_system or "metric",
                     },
                     "general_info",
                 )

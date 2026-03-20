@@ -1,184 +1,133 @@
 # ---------------------------------------------------------------------------
 # utils/definitions.py
 # ---------------------------------------------------------------------------
+# Unit data is loaded from units.json at import time.
+# All exports below keep the same names and types as before — no other file
+# needs to change.
+# ---------------------------------------------------------------------------
+
+import json
+import os
+
+_UNITS_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "units.json")
 
 
-# Add to definitions.py after ALL_CONSTRUCTION_UNITS
+def _load_units_json() -> tuple[dict, dict]:
+    """Load units.json and return (raw_data, merged_units).
 
-UNIT_TO_KG = {
-    # Mass — base unit: kg
-    "kg": 1.0,  # Kilogram
-    "kgs": 1.0,  # Kilograms (plural)
-    "g": 0.001,  # Gram
-    "gm": 0.001,  # Gram (alternate)
-    "gram": 0.001,  # Gram (full name)
-    "t": 1000.0,  # Metric Tonne
-    "tonne": 1000.0,  # Metric Tonne (full name)
-    "mt": 1000.0,  # Metric Tonne (abbreviation)
-    "ton": 1000.0,  # Tonne (common usage)
-    "quintal": 100.0,  # Quintal (100 kg)
-    "q": 100.0,  # Quintal (shorthand)
-    "bag": 50.0,  # Cement Bag (standard 50 kg)
-    "lb": 0.453592,  # Pound (Imperial)
-    "lbs": 0.453592,  # Pounds (plural)
-    "pound": 0.453592,  # Pound (full name)
+    merged_units = _common + every non-underscore, non-'dimensions' system block,
+    plus alias expansion so legacy codes like 'sqm', 'cum', 'tonne', 'rm' remain
+    valid lookup keys alongside their canonical counterparts.
+    """
+    with open(_UNITS_JSON, "r", encoding="utf-8") as f:
+        raw = json.load(f)
+
+    merged: dict = {}
+    merged.update(raw.get("_common", {}))
+    for key, value in raw.items():
+        if not key.startswith("_") and key != "dimensions":
+            merged.update(value)
+
+    # Expand aliases that look like simple unit codes (no spaces / punctuation)
+    # so that e.g. UNIT_TO_SI["sqm"] and UNIT_TO_SI["m2"] both work.
+    for unit_data in list(merged.values()):
+        for alias in unit_data.get("aliases", []):
+            alias_key = alias.strip().lower()
+            if alias_key and alias_key not in merged:
+                if all(c.isalnum() or c == "_" for c in alias_key):
+                    merged[alias_key] = unit_data
+
+    return raw, merged
+
+
+_raw_data, _all_units = _load_units_json()
+
+# ---------------------------------------------------------------------------
+# Public exports — same names, same types, now driven by units.json
+# ---------------------------------------------------------------------------
+
+# Maps unit code → how many SI base units it equals
+UNIT_TO_SI: dict[str, float] = {
+    code: u["to_si"] for code, u in _all_units.items()
 }
+
+# Maps unit code → its physical dimension
+UNIT_DIMENSION: dict[str, str] = {
+    code: u["dimension"] for code, u in _all_units.items()
+}
+
+# Maps dimension name → its SI base unit code
+SI_BASE_UNITS: dict[str, str] = {
+    dim: info["si"] for dim, info in _raw_data["dimensions"].items()
+}
+
+# Maps unit code → pretty display symbol (falls back to code if not set)
+UNIT_DISPLAY: dict[str, str] = {
+    code: u.get("display", code) for code, u in _all_units.items()
+}
+
+# Mass-only convenience dict (kept for backward compatibility)
+UNIT_TO_KG: dict[str, float] = {
+    code: u["to_si"]
+    for code, u in _all_units.items()
+    if u["dimension"] == "Mass"
+}
+
+
+# ---------------------------------------------------------------------------
+# ConstructionUnits — grouped dropdown data, built from units.json
+# ---------------------------------------------------------------------------
+
+# Dimension display order for dropdowns
+_DIM_ORDER = ["Length", "Area", "Volume", "Mass", "Count"]
 
 
 class ConstructionUnits:
     def __init__(self):
-        # Your professional dictionary
-        self.units = {
-            "Length": {
-                # "mm": {
-                #     "name": "mm , Millimeter",
-                #     "example": "Rebar diameter, plate thickness",
-                # },
-                "m": {"name": "m , Meter", "example": "Wall length, piping, conduit"},
-                "rm": {
-                    "name": "RM , Running Meter",
-                    "example": "Pipes, cables, skirting",
-                },
-                "ft": {"name": "ft , Foot", "example": "Residential layout dimensions"},
-            },
-            "Area": {
-                "m2": {
-                    "name": "m² , Square Meter",
-                    "example": "Plastering, flooring, shuttering",
-                },
-                "sqm": {"name": "sqm , Square Meter", "example": "Tile work, painting"},
-                "sqft": {"name": "sq.ft , Square Foot", "example": "Flat sale area"},
-                "sqyd": {"name": "sq.yd , Square Yard", "example": "Land purchase"},
-            },
-            "Volume": {
-                "m3": {
-                    "name": "m³ , Cubic Meter",
-                    "example": "Concrete, excavation, brickwork",
-                },
-                "cum": {
-                    "name": "cum , Cubic Meter",
-                    "example": "Concrete supply billing",
-                },
-                "cft": {
-                    "name": "cft , Cubic Foot",
-                    "example": "Sand, aggregates supply",
-                },
-            },
-            "Mass": {
-                "kg": {"name": "kg , Kilogram", "example": "Reinforcement steel"},
-                "tonne": {
-                    "name": "Tonne , Metric Tonne",
-                    "example": "Bulk steel purchase",
-                },
-                "mt": {
-                    "name": "MT , Metric Tonne",
-                    "example": "Structural steel billing",
-                },
-                "q": {"name": "q , Quintal", "example": "Shorthand for 100kg"},
-            },
-            "Count": {
-                "nos": {
-                    "name": "Nos. , Numbers",
-                    "example": "Doors, windows, fixtures",
-                },
-                "pcs": {"name": "Pcs. , Pieces", "example": "Sanitary fittings"},
-                "set": {
-                    "name": "Set , Equipment",
-                    "example": "Pump set, equipment set",
-                },
-                "ls": {"name": "L.S. , Lump Sum", "example": "General work items"},
-            },
-        }
+        self.units: dict[str, dict] = {dim: {} for dim in _DIM_ORDER}
+        self._populate("metric")   # default
 
-    def get_dropdown_data(self):
+    def _populate(self, system: str) -> None:
+        """Rebuild self.units from _common + the given system block only."""
+        for dim in _DIM_ORDER:
+            self.units[dim] = {}
+        for block_key in ("_common", system):
+            for code, u in _raw_data.get(block_key, {}).items():
+                dim = u.get("dimension")
+                if dim not in self.units:
+                    self.units[dim] = {}
+                self.units[dim][code] = {
+                    "name":    f"{u.get('display', code)} , {u.get('name', code)}",
+                    "example": u.get("example", ""),
+                }
+
+    def reload(self, system: str) -> None:
+        """Switch active unit system and repopulate dropdown data in-place."""
+        self._populate(system)
+
+    def get_dropdown_data(self) -> list[tuple]:
         """Returns a list of tuples: (Code, Name, Example)"""
         data = []
-        for cat, units in self.units.items():
-            for code, info in units.items():
+        for cat in _DIM_ORDER:
+            for code, info in self.units.get(cat, {}).items():
                 data.append((code, info["name"], info["example"]))
         return data
 
 
 _CONSTRUCTION_UNITS = ConstructionUnits()
-# New constant for the UI
 UNIT_DROPDOWN_DATA = _CONSTRUCTION_UNITS.get_dropdown_data()
 
 
-# ---------------------------------------------------------------------------
-# SI unit system for the Add Material dialog
-# ---------------------------------------------------------------------------
+def set_active_unit_system(system: str) -> None:
+    """Call this when a project loads to filter unit dropdowns by system.
 
-# Maps unit code → how many SI base units it equals
-# (e.g. tonne → 1000.0 means 1 tonne = 1000 kg)
-UNIT_TO_SI = {
-    # Mass (SI base: kg)
-    "kg":    1.0,
-    "tonne": 1000.0,
-    "mt":    1000.0,
-    "q":     100.0,
-    # Length (SI base: m)
-    "m":     1.0,
-    "rm":    1.0,
-    "ft":    0.3048,
-    # Area (SI base: m²)
-    "m2":    1.0,
-    "sqm":   1.0,
-    "sqft":  0.09290304,
-    "sqyd":  0.83612736,
-    # Volume (SI base: m³)
-    "m3":    1.0,
-    "cum":   1.0,
-    "cft":   0.028316846,
-    # Count (dimensionless, base: nos)
-    "nos":   1.0,
-    "pcs":   1.0,
-    "set":   1.0,
-    "ls":    1.0,
-}
-
-# Maps unit code → its physical dimension
-UNIT_DIMENSION = {
-    "kg":    "Mass",   "tonne": "Mass",   "mt":    "Mass",   "q":     "Mass",
-    "m":     "Length", "rm":    "Length", "ft":    "Length",
-    "m2":    "Area",   "sqm":   "Area",   "sqft":  "Area",   "sqyd":  "Area",
-    "m3":    "Volume", "cum":   "Volume", "cft":   "Volume",
-    "nos":   "Count",  "pcs":   "Count",  "set":   "Count",  "ls":    "Count",
-}
-
-# Maps dimension name → its SI base unit code
-SI_BASE_UNITS = {
-    "Mass":   "kg",
-    "Length": "m",
-    "Area":   "m2",
-    "Volume": "m3",
-    "Count":  "nos",
-}
-
-
-# Maps raw unit codes to their pretty display symbols used across the UI.
-# Add or change a symbol here and every widget picks it up automatically.
-UNIT_DISPLAY: dict[str, str] = {
-    # Area
-    "m2":    "m²",
-    "sqm":   "m²",
-    "sqft":  "sq.ft",
-    "sqyd":  "sq.yd",
-    # Volume
-    "m3":    "m³",
-    "cum":   "m³",
-    "cft":   "ft³",
-    # Mass
-    "t":     "t",
-    "tonne": "t",
-    "mt":    "MT",
-    "q":     "q",
-    # Length
-    "rm":    "RM",
-    # Count
-    "nos":   "Nos.",
-    "pcs":   "Pcs.",
-    "ls":    "L.S.",
-}
+    UNIT_TO_SI / UNIT_DIMENSION / UNIT_DISPLAY are unchanged (all units kept
+    for lookup). Only _CONSTRUCTION_UNITS (the dropdown) is filtered.
+    Defaults to 'metric' for old projects without a unit_system field.
+    """
+    valid = [k for k in _raw_data if not k.startswith("_") and k != "dimensions"]
+    active = system if system in valid else "metric"
+    _CONSTRUCTION_UNITS.reload(active)
 
 
 STRUCTURE_CHUNKS = [

@@ -605,6 +605,16 @@ class ProjectWindow(QMainWindow):
         display = self.controller.active_display_name or self.project_id
         self.setWindowTitle(f"LCCA - {display}")
         self.status_bar.showMessage(f"Project: {display}")
+
+        # Apply project's unit system to the unit dropdowns
+        try:
+            info = self.controller.engine.fetch_chunk("general_info") or {}
+            unit_system = info.get("unit_system", "metric")
+            from gui.components.utils.definitions import set_active_unit_system
+            set_active_unit_system(unit_system)
+        except Exception:
+            pass
+
         self.show_project_view()
 
     def _on_fault(self, error_message: str):

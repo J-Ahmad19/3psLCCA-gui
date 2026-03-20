@@ -14,7 +14,7 @@ Public API (backward-compatible):
     validate_cf_simple(mat, denom, cf)             -> dict
 """
 
-from .definitions import UNIT_TO_SI, UNIT_DIMENSION, SI_BASE_UNITS
+from .definitions import UNIT_TO_SI, UNIT_DIMENSION, SI_BASE_UNITS, _all_units
 
 # ---------------------------------------------------------------------------
 # Global custom-units cache
@@ -47,34 +47,32 @@ def get_custom_units() -> list[dict]:
 
 
 def get_known_units() -> set[str]:
-    """Return the full set of recognised unit codes (canonical + aliases).
+    """Return the full set of recognised unit codes (canonical + aliases + custom).
 
-    Derived from UNIT_TO_SI and _UNIT_ALIASES so there is a single source
-    of truth — no hardcoded lists elsewhere in the codebase.
+    Derived from UNIT_TO_SI, _UNIT_ALIASES, and the custom units cache so
+    there is a single source of truth — no hardcoded lists elsewhere.
     """
-    return set(UNIT_TO_SI.keys()) | set(_UNIT_ALIASES.keys())
+    custom = {c["symbol"] for c in _custom_units_cache if c.get("symbol")}
+    return set(UNIT_TO_SI.keys()) | set(_UNIT_ALIASES.keys()) | custom
 
 
 # ---------------------------------------------------------------------------
-# Aliases — normalise SOR / registry strings to canonical unit codes
-# Mirrors _SOR_UNIT_ALIASES in material_dialog.py plus extra common variants
+# Aliases — normalise SOR / registry strings to canonical unit codes.
+# Flattened from units.json at import time — no hardcoded entries here.
+# Covers both simple codes (sqm, cum) and SOR strings (Sqm., M.T., Nos.)
 # ---------------------------------------------------------------------------
 
-_UNIT_ALIASES: dict[str, str] = {
-    "rmt":      "rm",
-    "lmt":      "rm",
-    "sqmt":     "sqm",
-    "t":        "tonne",
-    "kgs":      "kg",
-    "ton":      "tonne",
-    "metric_ton": "tonne",
-    "kilogram": "kg",
-    "meter":    "m",
-    "metre":    "m",
-    "sqft":     "sqft",
-    "sqyd":     "sqyd",
-    "cft":      "cft",
-}
+def _build_aliases() -> dict[str, str]:
+    """Return alias→canonical_code from every unit's aliases list in units.json."""
+    result: dict[str, str] = {}
+    for code, unit_data in _all_units.items():
+        for alias in unit_data.get("aliases", []):
+            key = alias.strip().lower()
+            if key and key not in result:
+                result[key] = code
+    return result
+
+_UNIT_ALIASES: dict[str, str] = _build_aliases()
 
 
 # ---------------------------------------------------------------------------

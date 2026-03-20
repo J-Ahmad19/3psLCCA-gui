@@ -148,6 +148,44 @@ def _get_tools() -> list[dict]:
     except ImportError as e:
         tools.append(_error_card("Catalog Builder", str(e)))
 
+    # ── Unit Manager ───────────────────────────────────────────────────────
+    try:
+        from unit_manager_gui import UnitManagerDialog
+        tools.append({
+            "key":    "unit_manager",
+            "icon":   "📐",
+            "name":   "Unit Manager",
+            "desc":   (
+                "Browse, add, and manage measurement units used across the app.\n"
+                "View all built-in units from units.json, add new canonical units, promote "
+                "custom units to built-in, and test how any raw unit string (e.g. Sqm., MT, Nos.) "
+                "resolves at runtime."
+            ),
+            "accent": _YELLOW,
+            "open":   lambda parent: _open_dialog(UnitManagerDialog, parent),
+        })
+    except ImportError as e:
+        tools.append(_error_card("Unit Manager", str(e)))
+
+    # ── File Integrity Checker ─────────────────────────────────────────────
+    try:
+        from integrity_tool_gui import IntegrityToolDialog
+        tools.append({
+            "key":    "integrity_checker",
+            "icon":   "🔒",
+            "name":   "File Integrity Checker",
+            "desc":   (
+                "Track and verify static JSON files against a stored MD5 baseline.\n"
+                "Detects tampering or accidental edits to units.json, material_catalog.json, "
+                "wpi_db.json, and any other tracked file. Regen rebuilds the baseline after "
+                "an intentional change. Integrity records are stored in devtools/integrity.json."
+            ),
+            "accent": _TEAL,
+            "open":   lambda parent: _open_dialog(IntegrityToolDialog, parent),
+        })
+    except ImportError as e:
+        tools.append(_error_card("File Integrity Checker", str(e)))
+
     return tools
 
 
