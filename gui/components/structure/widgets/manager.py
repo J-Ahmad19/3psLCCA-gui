@@ -66,6 +66,8 @@ class StructureManagerWidget(QWidget):
                     chunk_name=self.chunk_name, data=data
                 )
 
+            info = self.controller.engine.fetch_chunk("general_info") or {}
+            self._currency = str(info.get("project_currency", ""))
             self.data = data
             self.refresh_ui()
         except Exception as e:
@@ -83,11 +85,13 @@ class StructureManagerWidget(QWidget):
 
         self.sections = {}
         self._add_material_btns = []
+        currency = getattr(self, "_currency", "")
 
         for comp_name, items in self.data.items():
             self.create_section(comp_name)
             table = self.sections.get(comp_name)
             if table:
+                table.set_currency(currency)
                 for original_index, item in enumerate(items):
                     if not item.get("state", {}).get("in_trash", False):
                         table.add_row(item, original_index)

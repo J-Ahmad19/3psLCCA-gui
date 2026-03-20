@@ -40,6 +40,7 @@ from ...utils.form_builder.form_definitions import FieldDef, Section
 from ...utils.form_builder.form_builder import build_form
 from ...utils.remarks_editor import RemarksEditor
 from ...utils.display_format import fmt, fmt_comma, DECIMAL_PLACES
+from ...utils.icons import make_icon_btn
 
 CHUNK = "machinery_emissions_data"
 BASE_DOCS_URL = "https://yourdocs.com/carbon/machinery/"
@@ -260,10 +261,7 @@ class _EquipmentRow:
         self.emissions_item.setFlags(Qt.ItemIsEnabled)
         self.emissions_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
-        self.btn_delete = QPushButton("✕")
-        self.btn_delete.setFixedWidth(32)
-        self.btn_delete.setFixedHeight(28)
-        self.btn_delete.setToolTip("Remove this row")
+        self.btn_delete = make_icon_btn("trash", "Remove this row", icon_color="#e74c3c", hover_color="192, 57, 43")
         self.btn_delete.clicked.connect(on_delete)
 
         # Blank row: suffix only, EF stays 0 until user picks source
@@ -348,15 +346,15 @@ class _EquipmentRow:
 
 class _DetailedTable(QWidget):
     HEADERS = [
-        "Equipment Name",
-        "Energy Source",
-        "Fuel / Power Rating",
-        "Avg Hrs/Day",
-        "No. of Days",
-        "EF (kg CO₂e/unit)",
-        "Consumption",
-        "Emissions (kg CO₂e)",
-        "",
+        ("Equipment Name",      Qt.AlignLeft   | Qt.AlignVCenter),  # 0
+        ("Energy Source",       Qt.AlignLeft   | Qt.AlignVCenter),  # 1
+        ("Fuel / Power Rating", Qt.AlignRight  | Qt.AlignVCenter),  # 2
+        ("Avg Hrs/Day",         Qt.AlignRight  | Qt.AlignVCenter),  # 3
+        ("No. of Days",         Qt.AlignRight  | Qt.AlignVCenter),  # 4
+        ("EF (kg CO₂e/unit)",   Qt.AlignRight  | Qt.AlignVCenter),  # 5
+        ("Consumption",         Qt.AlignRight  | Qt.AlignVCenter),  # 6
+        ("Emissions (kg CO₂e)", Qt.AlignRight  | Qt.AlignVCenter),  # 7
+        ("",                    Qt.AlignCenter),                     # 8 delete
     ]
     _ROW_H = 36
     _HEADER_H = 38  # fallback if header not yet painted
@@ -374,7 +372,10 @@ class _DetailedTable(QWidget):
 
         # Table — no fixed height; grows/shrinks via sizeHint override
         self._table = QTableWidget(0, len(self.HEADERS))
-        self._table.setHorizontalHeaderLabels(self.HEADERS)
+        for col, (label, align) in enumerate(self.HEADERS):
+            item = QTableWidgetItem(label)
+            item.setTextAlignment(align)
+            self._table.setHorizontalHeaderItem(col, item)
         hh = self._table.horizontalHeader()
         hh.setSectionResizeMode(0, QHeaderView.Stretch)
         for col in range(1, len(self.HEADERS) - 1):
@@ -481,7 +482,13 @@ class _DetailedTable(QWidget):
         self._table.setCellWidget(row_idx, 5, eq.ef)
         self._table.setItem(row_idx, 6, eq.consumption_item)
         self._table.setItem(row_idx, 7, eq.emissions_item)
-        self._table.setCellWidget(row_idx, 8, eq.btn_delete)
+        _action = QWidget()
+        _action_layout = QHBoxLayout(_action)
+        _action_layout.setContentsMargins(0, 0, 0, 0)
+        _action_layout.addStretch()
+        _action_layout.addWidget(eq.btn_delete)
+        _action_layout.addStretch()
+        self._table.setCellWidget(row_idx, 8, _action)
         self._refresh_table_height()
         self._recalculate()
 

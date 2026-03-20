@@ -23,7 +23,7 @@ from .transport_dialog import TransportDialog
 from PySide6.QtGui import QColor
 from ...utils.definitions import STRUCTURE_CHUNKS, UNIT_DIMENSION
 from ...utils.display_format import fmt, fmt_comma
-from ...utils.icons import make_icon
+from ...utils.icons import make_icon, make_icon_btn
 
 
 # ---------------------------------------------------------------------------
@@ -265,12 +265,8 @@ class VehicleCard(QGroupBox):
 
         # Buttons
         btn_row = QHBoxLayout()
-        edit_btn = QPushButton("Edit Delivery")
-        edit_btn.setIcon(make_icon("edit"))
-        edit_btn.setIconSize(QSize(16, 16))
-        trash_btn = QPushButton("Remove")
-        trash_btn.setIcon(make_icon("trash"))
-        trash_btn.setIconSize(QSize(16, 16))
+        edit_btn = make_icon_btn("edit", "Edit Delivery", size=32, hover_color="241, 196, 15")
+        trash_btn = make_icon_btn("trash", "Remove", size=32, icon_color="#e74c3c", hover_color="192, 57, 43")
         edit_btn.clicked.connect(on_edit)
         trash_btn.clicked.connect(on_trash)
         edit_btn.setEnabled(not frozen)
@@ -283,17 +279,20 @@ class VehicleCard(QGroupBox):
     def _build_table(self, mat_results: list) -> QTableWidget:
         table = QTableWidget()
         table.setColumnCount(7)
-        table.setHorizontalHeaderLabels(
-            [
-                "Material",
-                "Category",
-                "kg Factor",
-                "Qty (kg)",
-                "Trips",
-                "Emission (kgCO₂e)",
-                "Warnings",
-            ]
-        )
+        _L = Qt.AlignLeft  | Qt.AlignVCenter
+        _R = Qt.AlignRight | Qt.AlignVCenter
+        for col, (label, align) in enumerate([
+            ("Material",          _L),
+            ("Category",          _L),
+            ("kg Factor",         _R),
+            ("Qty (kg)",          _R),
+            ("Trips",             _R),
+            ("Emission (kgCO₂e)", _R),
+            ("Warnings",          _L),
+        ]):
+            item = QTableWidgetItem(label)
+            item.setTextAlignment(align)
+            table.setHorizontalHeaderItem(col, item)
         h = table.horizontalHeader()
         h.setStretchLastSection(False)
         h.setSectionResizeMode(0, QHeaderView.Stretch)          # Material — most variable

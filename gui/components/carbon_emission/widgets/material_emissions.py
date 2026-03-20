@@ -10,9 +10,10 @@ from PySide6.QtWidgets import (
     QFrame,
     QSizePolicy,
     QScrollArea,
+    QStyleOptionHeader,
 )
-from PySide6.QtCore import Qt, QSize, QTimer
-from PySide6.QtGui import QColor
+from PySide6.QtCore import Qt, QSize, QTimer, QRect
+from PySide6.QtGui import QColor, QPainter
 import datetime
 
 from ...utils.unit_resolver import analyze_conversion_sympy
@@ -118,39 +119,127 @@ def calc_carbon(item: dict) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Two-tier grouped header
+# ---------------------------------------------------------------------------
+
+
+class _GroupedHeader(QHeaderView):
+    """Horizontal header with spanning group labels on the top tier and
+    individual column labels on the bottom tier.
+
+    groups: list of (start_col, span, label) — e.g. [(2, 2, "Qty"), (5, 2, "Emission")]
+    Columns NOT in any group span the full height with their label centred.
+    """
+
+    def __init__(self, groups=(), parent=None):
+        super().__init__(Qt.Horizontal, parent)
+        self._groups = list(groups)
+        # Map each col → (start, span, label) for quick lookup
+        self._col_group: dict[int, tuple] = {}
+        for start, span, label in self._groups:
+            for c in range(start, start + span):
+                self._col_group[c] = (start, span, label)
+
+    def sizeHint(self):
+        s = super().sizeHint()
+        return QSize(s.width(), s.height() * 2) if self._groups else s
+
+    def paintSection(self, painter, rect, logical_index):
+        if not self._groups or logical_index not in self._col_group:
+            # Non-grouped column — full height, label centred
+            super().paintSection(painter, rect, logical_index)
+            return
+
+        h2 = rect.height() // 2
+        bottom = QRect(rect.x(), rect.y() + h2, rect.width(), h2)
+
+        # Bottom tier — sub-column label clipped to bottom half
+        painter.save()
+        painter.setClipRect(bottom)
+        super().paintSection(painter, bottom, logical_index)
+        painter.restore()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self._groups:
+            return
+
+        painter = QPainter(self.viewport())
+        h2 = self.height() // 2
+
+        for start, span, label in self._groups:
+            x = self.sectionViewportPosition(start)
+            total_w = sum(self.sectionSize(start + i) for i in range(span))
+            group_rect = QRect(x, 0, total_w, h2)
+
+            opt = QStyleOptionHeader()
+            self.initStyleOption(opt)
+            opt.rect = group_rect
+            opt.section = start
+            opt.text = label
+            opt.textAlignment = Qt.AlignCenter | Qt.AlignVCenter
+            opt.position = QStyleOptionHeader.Middle
+            opt.selectedPosition = QStyleOptionHeader.NotAdjacent
+            self.style().drawControl(self.style().ControlElement.CE_Header, opt, painter, self)
+
+        painter.end()
+
+
+# ---------------------------------------------------------------------------
 # Carbon Table Widget
 # ---------------------------------------------------------------------------
 
 
 class CarbonTable(QTableWidget):
+    _L = Qt.AlignLeft | Qt.AlignVCenter
+    _R = Qt.AlignRight | Qt.AlignVCenter
+
+    # Cols 2-3 → "Qty" group;  cols 5-6 → "Emission" group
+    _GROUPS = [(2, 2, "Qty"), (5, 2, "Emission")]
+
+    _C = Qt.AlignCenter | Qt.AlignVCenter
+
     INCLUDED_HEADERS = [
-        "Category",
-        "Material",
-        "Qty (unit)",
-        "Conv. Factor",
-        "Emission",
-        "Total kgCO₂e",
-        "Warning",
-        "Action",
+        ("Category",      _L),  # 0
+        ("Material",      _L),  # 1
+        ("Value",         _C),  # 2  ┐ Qty group (sub-col → center)
+        ("Unit",          _C),  # 3  ┘
+        ("Conv. Factor",  _R),  # 4
+        ("Value",         _C),  # 5  ┐ Emission group (sub-col → center)
+        ("Unit",          _C),  # 6  ┘
+        ("Total kgCO₂e", _R),  # 7
+        ("Warning",       _L),  # 8
+        ("Action",        _C),  # 9
     ]
     EXCLUDED_HEADERS = [
-        "Category",
-        "Material",
-        "Qty (unit)",
-        "Conv. Factor",
-        "Emission",
-        "Reason",
-        "Action",
+        ("Category",      _L),  # 0
+        ("Material",      _L),  # 1
+        ("Value",         _C),  # 2  ┐ Qty group (sub-col → center)
+        ("Unit",          _C),  # 3  ┘
+        ("Conv. Factor",  _R),  # 4
+        ("Value",         _C),  # 5  ┐ Emission group (sub-col → center)
+        ("Unit",          _C),  # 6  ┘
+        ("Reason",        _L),  # 7
+        ("Action",        _C),  # 8
     ]
 
     def __init__(self, is_included: bool, parent=None):
         super().__init__(parent)
         self.is_included = is_included
+
+        # Install grouped header before setting column count
+        grouped_header = _GroupedHeader(groups=self._GROUPS)
+        self.setHorizontalHeader(grouped_header)
+
         headers = self.INCLUDED_HEADERS if is_included else self.EXCLUDED_HEADERS
         self.setColumnCount(len(headers))
-        self.setHorizontalHeaderLabels(headers)
+        for col, (label, align) in enumerate(headers):
+            item = QTableWidgetItem(label)
+            item.setTextAlignment(align)
+            self.setHorizontalHeaderItem(col, item)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
-        self.horizontalHeader().setStretchLastSection(True)
+        self.horizontalHeader().setStretchLastSection(False)
+        self.horizontalHeader().setMinimumSectionSize(40)
         self.setEditTriggers(QTableWidget.NoEditTriggers)
         self.setSelectionMode(QTableWidget.NoSelection)
         self.verticalHeader().setDefaultSectionSize(35)
@@ -160,13 +249,55 @@ class CarbonTable(QTableWidget):
         self._set_column_widths()
 
     def _set_column_widths(self):
-        widths = (
-            [110, 180, 80, 90, 110, 100, 70, 160]
-            if self.is_included
-            else [110, 160, 80, 90, 110, 130, 160]
-        )
-        for i, w in enumerate(widths):
-            self.setColumnWidth(i, w)
+        # Initial defaults at ~800px viewport (rest ≈ 720px)
+        # Sub-column pairs are equal: qty=43px each, emission=65px each
+        if self.is_included:
+            for col, w in enumerate([65, 144, 43, 43, 50, 65, 65, 65, 173, 80]):
+                self.setColumnWidth(col, w)
+        else:
+            for col, w in enumerate([72, 158, 43, 43, 50, 65, 65, 216, 80]):
+                self.setColumnWidth(col, w)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        total = self.viewport().width()
+        action_w = 80
+        rest = max(1, total - action_w)
+
+        # Sub-columns in each group are EQUAL width so the spanning label is centred.
+        # Qty group (cols 2-3): each = 6%  → combined 12%
+        # Emission group (cols 5-6): each = 9% → combined 18%
+        qty_sub = max(45, int(rest * 0.06))
+        em_sub  = max(50, int(rest * 0.09))
+
+        if self.is_included:
+            widths = {
+                0: max(65,  int(rest * 0.09)),  # Category
+                1: max(100, int(rest * 0.20)),  # Material
+                2: qty_sub,                     # Qty › Value   (= Qty Unit sub-col 1)
+                3: qty_sub,                     # Qty › Unit    (= Qty Unit sub-col 2)
+                4: max(70,  int(rest * 0.09)),  # Conv. Factor
+                5: em_sub,                      # Emission › Value
+                6: em_sub,                      # Emission › Unit
+                7: max(70,  int(rest * 0.09)),  # Total kgCO₂e
+                8: max(100, int(rest * 0.23)),  # Warning
+                9: action_w,
+            }
+        else:
+            widths = {
+                0: max(65,  int(rest * 0.10)),  # Category
+                1: max(100, int(rest * 0.22)),  # Material
+                2: qty_sub,                     # Qty › Value
+                3: qty_sub,                     # Qty › Unit
+                4: max(70,  int(rest * 0.09)),  # Conv. Factor
+                5: em_sub,                      # Emission › Value
+                6: em_sub,                      # Emission › Unit
+                7: max(100, int(rest * 0.29)),  # Reason
+                8: action_w,
+            }
+
+        for col, width in widths.items():
+            self.setColumnWidth(col, width)
 
     def sizeHint(self):
         header_h = self.horizontalHeader().height() or 35
@@ -369,14 +500,16 @@ class MaterialEmissions(QWidget):
 
             t.setItem(row, 0, QTableWidgetItem(category))
             t.setItem(row, 1, QTableWidgetItem(v.get("material_name", "")))
-            t.setItem(row, 2, _ri(f"{fmt(v.get('quantity', 0))} {_fmt_unit(v.get('unit', ''))}"))
+            t.setItem(row, 2, _ri(fmt(v.get("quantity", 0))))
+            t.setItem(row, 3, QTableWidgetItem(_fmt_unit(v.get("unit", ""))))
             _cf_raw = v.get("conversion_factor", "not_available")
-            t.setItem(row, 3, _ri(fmt(_cf_raw) if _cf_raw not in _NA else "—"))
-            t.setItem(row, 4, _ri(f"{fmt(v.get('carbon_emission', 0))} {_fmt_carbon_unit(v.get('carbon_unit', ''))}"))
+            t.setItem(row, 4, _ri(fmt(_cf_raw) if _cf_raw not in _NA else "—"))
+            t.setItem(row, 5, _ri(fmt(v.get("carbon_emission", 0))))
+            t.setItem(row, 6, QTableWidgetItem(_fmt_carbon_unit(v.get("carbon_unit", ""))))
 
             carbon_item = QTableWidgetItem(fmt(carbon))
             carbon_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            t.setItem(row, 5, carbon_item)
+            t.setItem(row, 7, carbon_item)
 
             # Persistent Warnings: Check for zero qty or if the confirmed factor is still suspicious
             warnings = []
@@ -385,7 +518,7 @@ class MaterialEmissions(QWidget):
             if analysis["is_suspicious"]:
                 warnings.append("⚠️ Conversion Factor seems incorrect.")
 
-            t.setItem(row, 6, QTableWidgetItem(", ".join(warnings)))
+            t.setItem(row, 8, QTableWidgetItem(", ".join(warnings)))
 
             edit_btn = make_icon_btn("edit", "Edit emission factor")
             edit_btn.clicked.connect(
@@ -396,7 +529,7 @@ class MaterialEmissions(QWidget):
                 lambda _, ci=chunk_id, cn=comp_name, i=idx: self._toggle_inclusion(ci, cn, i, False)
             )
             excl_btn.setEnabled(not self._frozen)
-            t.setCellWidget(row, 7, self._btn_container(edit_btn, excl_btn))
+            t.setCellWidget(row, 9, self._btn_container(edit_btn, excl_btn))
 
         t.update_height()
         t.setUpdatesEnabled(True)
@@ -417,11 +550,13 @@ class MaterialEmissions(QWidget):
 
             t.setItem(row, 0, QTableWidgetItem(category))
             t.setItem(row, 1, QTableWidgetItem(v.get("material_name", "")))
-            t.setItem(row, 2, _ri(f"{fmt(v.get('quantity', 0))} {_fmt_unit(v.get('unit', ''))}"))
+            t.setItem(row, 2, _ri(fmt(v.get("quantity", 0))))
+            t.setItem(row, 3, QTableWidgetItem(_fmt_unit(v.get("unit", ""))))
             _cf_raw = v.get("conversion_factor", "not_available")
-            t.setItem(row, 3, _ri(fmt(_cf_raw) if _cf_raw not in _NA else "—"))
-            t.setItem(row, 4, _ri(f"{fmt(v.get('carbon_emission', 0))} {_fmt_carbon_unit(v.get('carbon_unit', ''))}"))
-            t.setItem(row, 5, QTableWidgetItem(reason))
+            t.setItem(row, 4, _ri(fmt(_cf_raw) if _cf_raw not in _NA else "—"))
+            t.setItem(row, 5, _ri(fmt(v.get("carbon_emission", 0))))
+            t.setItem(row, 6, QTableWidgetItem(_fmt_carbon_unit(v.get("carbon_unit", ""))))
+            t.setItem(row, 7, QTableWidgetItem(reason))
 
             edit_btn = make_icon_btn("edit", "Edit emission factor")
             edit_btn.clicked.connect(
@@ -432,14 +567,14 @@ class MaterialEmissions(QWidget):
                 t.set_row_style(
                     row, BG_INVALID if reason == "Missing Data" else BG_SUSPICIOUS
                 )
-                t.setCellWidget(row, 6, self._btn_container(edit_btn))
+                t.setCellWidget(row, 8, self._btn_container(edit_btn))
             else:
                 incl_btn = make_icon_btn("include", "Include in calculation", icon_color="#2ecc71", hover_color="46, 204, 113")
                 incl_btn.clicked.connect(
                     lambda _, ci=chunk_id, cn=comp_name, i=idx: self._toggle_inclusion(ci, cn, i, True)
                 )
                 incl_btn.setEnabled(not self._frozen)
-                t.setCellWidget(row, 6, self._btn_container(edit_btn, incl_btn))
+                t.setCellWidget(row, 8, self._btn_container(edit_btn, incl_btn))
         t.update_height()
         t.setUpdatesEnabled(True)
 

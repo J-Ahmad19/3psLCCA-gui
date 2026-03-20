@@ -7,14 +7,88 @@ from PySide6.QtWidgets import (
     QWidget,
     QHBoxLayout,
     QMessageBox,
+    QStyleOptionHeader,
 )
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QRect
+from PySide6.QtGui import QPainter
 from ...utils.definitions import UNIT_DISPLAY
 from ...utils.display_format import fmt, fmt_comma
 from ...utils.icons import make_icon, make_icon_btn
 
 
+# ---------------------------------------------------------------------------
+# Two-tier grouped header (shared pattern with CarbonTable)
+# ---------------------------------------------------------------------------
+
+
+class _GroupedHeader(QHeaderView):
+    """Horizontal header with spanning group labels on the top tier and
+    individual column labels on the bottom tier.
+
+    groups: list of (start_col, span, label)
+    Columns NOT in any group span the full height with their label centred.
+    """
+
+    def __init__(self, groups=(), parent=None):
+        super().__init__(Qt.Horizontal, parent)
+        self._groups = list(groups)
+        self._col_group: dict[int, tuple] = {}
+        for start, span, label in self._groups:
+            for c in range(start, start + span):
+                self._col_group[c] = (start, span, label)
+
+    def sizeHint(self):
+        s = super().sizeHint()
+        return QSize(s.width(), s.height() * 2) if self._groups else s
+
+    def paintSection(self, painter, rect, logical_index):
+        if not self._groups or logical_index not in self._col_group:
+            super().paintSection(painter, rect, logical_index)
+            return
+
+        h2 = rect.height() // 2
+        bottom = QRect(rect.x(), rect.y() + h2, rect.width(), h2)
+
+        painter.save()
+        painter.setClipRect(bottom)
+        super().paintSection(painter, bottom, logical_index)
+        painter.restore()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self._groups:
+            return
+
+        painter = QPainter(self.viewport())
+        h2 = self.height() // 2
+
+        for start, span, label in self._groups:
+            x = self.sectionViewportPosition(start)
+            total_w = sum(self.sectionSize(start + i) for i in range(span))
+            group_rect = QRect(x, 0, total_w, h2)
+
+            opt = QStyleOptionHeader()
+            self.initStyleOption(opt)
+            opt.rect = group_rect
+            opt.section = start
+            opt.text = label
+            opt.textAlignment = Qt.AlignCenter | Qt.AlignVCenter
+            opt.position = QStyleOptionHeader.Middle
+            opt.selectedPosition = QStyleOptionHeader.NotAdjacent
+            self.style().drawControl(self.style().ControlElement.CE_Header, opt, painter, self)
+
+        painter.end()
+
+
+# ---------------------------------------------------------------------------
+# Structure table
+# ---------------------------------------------------------------------------
+
+
 class StructureTableWidget(QTableWidget):
+    # Col 2-3 → "Qty" group (Value + Unit)
+    _GROUPS = [(2, 2, "Qty")]
+
     def __init__(self, parent_manager, component_name, is_trash_view=False):
         super().__init__()
         self.manager = parent_manager
@@ -22,32 +96,47 @@ class StructureTableWidget(QTableWidget):
         self.is_trash_view = is_trash_view
         self._frozen = False
 
-        # Setup 6 columns: Work Name, Rate, Qty, Source, Total, Action
-        self.setColumnCount(6)
-        self.setHorizontalHeaderLabels(
-            ["Work Name", "Rate", "Qty", "Source", "Total", "Action"]
-        )
+        # Install grouped header before setting column count
+        self.setHorizontalHeader(_GroupedHeader(groups=self._GROUPS))
+
+        # Setup 7 columns: Work Name, Rate, Value, Unit, Source, Total, Action
+        self.setColumnCount(7)
+        _L = Qt.AlignLeft | Qt.AlignVCenter
+        _R = Qt.AlignRight | Qt.AlignVCenter
+        _C = Qt.AlignCenter | Qt.AlignVCenter
+        _headers = [
+            ("Work Name", _L),  # 0
+            ("Rate",      _R),  # 1
+            ("Value",     _C),  # 2  ┐ Qty group (sub-col → center)
+            ("Unit",      _C),  # 3  ┘
+            ("Source",    _L),  # 4
+            ("Total",     _R),  # 5
+            ("Action",    _C),  # 6
+        ]
+        for col, (label, align) in enumerate(_headers):
+            item = QTableWidgetItem(label)
+            item.setTextAlignment(align)
+            self.setHorizontalHeaderItem(col, item)
+
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.horizontalHeader().setStretchLastSection(False)
-        self.horizontalHeader().setMinimumSectionSize(100)
+        self.horizontalHeader().setMinimumSectionSize(40)
 
-        # Set proportional default widths
-        self.setColumnWidth(0, 220)  # Work Name
-        self.setColumnWidth(1, 80)  # Rate
-        self.setColumnWidth(2, 65)  # Qty
-        self.setColumnWidth(3, 110)  # Source
-        self.setColumnWidth(4, 90)  # Total
-        self.setColumnWidth(5, 140)  # Actions
+        # Default widths (overridden by resizeEvent once rendered)
+        self.setColumnWidth(0, 240)  # Work Name
+        self.setColumnWidth(1, 90)   # Rate
+        self.setColumnWidth(2, 58)   # Qty › Value
+        self.setColumnWidth(3, 58)   # Qty › Unit
+        self.setColumnWidth(4, 90)   # Source
+        self.setColumnWidth(5, 110)  # Total
+        self.setColumnWidth(6, 80)   # Actions
+
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-
-        # Disable direct typing in cells (Double-click logic handles editing)
         self.setEditTriggers(QTableWidget.NoEditTriggers)
-
         self.verticalHeader().setDefaultSectionSize(35)
 
-        # Connect Double Click for Editing (only if not in trash)
         if not self.is_trash_view:
             self.cellDoubleClicked.connect(self._on_cell_double_clicked)
 
@@ -68,6 +157,14 @@ class StructureTableWidget(QTableWidget):
         if self._frozen:
             return
         self.manager.open_edit_dialog(self.component_name, row)
+
+    def set_currency(self, code: str):
+        """Update Rate and Total column headers to show the project currency code."""
+        suffix = f" ({code})" if code else ""
+        for col, base in ((1, "Rate"), (5, "Total")):
+            item = self.horizontalHeaderItem(col)
+            if item:
+                item.setText(base + suffix)
 
     def sizeHint(self):
         header_h = self.horizontalHeader().height() or 35
@@ -90,29 +187,30 @@ class StructureTableWidget(QTableWidget):
         row = self.rowCount()
         self.insertRow(row)
 
-        # Access the nested 'values' block from your new schema
         v = item_data.get("values", {})
 
-        # 0. Work Name (Mapped to material_name)
+        # 0. Work Name
         self.setItem(row, 0, QTableWidgetItem(v.get("material_name", "New Item")))
 
-        # 1. Rate
-        rate_item = QTableWidgetItem(fmt(v.get("rate", 0)))
+        # 1. Rate (right-aligned)
+        rate_item = QTableWidgetItem(fmt_comma(v.get("rate", 0)))
         rate_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.setItem(row, 1, rate_item)
 
-        # 2. Qty
-        unit = v.get("unit", "")
-        unit = UNIT_DISPLAY.get(unit.lower(), unit) if unit else unit
-        qty_text = f"{fmt(v.get('quantity', 0))} {unit}".strip()
-        qty_item = QTableWidgetItem(qty_text)
+        # 2. Qty › Value (right-aligned)
+        qty_item = QTableWidgetItem(fmt(v.get("quantity", 0)))
         qty_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.setItem(row, 2, qty_item)
 
-        # 3. Source (Mapped to rate_source)
-        self.setItem(row, 3, QTableWidgetItem(v.get("rate_source", "Manual")))
+        # 3. Qty › Unit (left-aligned)
+        unit = v.get("unit", "")
+        unit = UNIT_DISPLAY.get(unit.lower(), unit) if unit else unit
+        self.setItem(row, 3, QTableWidgetItem(unit))
 
-        # 4. Total Calculation
+        # 4. Source
+        self.setItem(row, 4, QTableWidgetItem(v.get("rate_source", "Manual")))
+
+        # 5. Total (right-aligned, read-only)
         try:
             rate = float(v.get("rate", 0) or 0)
             qty = float(v.get("quantity", 0) or 0)
@@ -121,11 +219,11 @@ class StructureTableWidget(QTableWidget):
             total = 0.0
 
         total_item = QTableWidgetItem(fmt_comma(total))
-        total_item.setFlags(total_item.flags() & ~Qt.ItemIsEditable)  # Read-only
+        total_item.setFlags(total_item.flags() & ~Qt.ItemIsEditable)
         total_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.setItem(row, 4, total_item)
+        self.setItem(row, 5, total_item)
 
-        # 5. Actions (Edit + Trash / Restore)
+        # 6. Actions
         actions_widget = QWidget()
         actions_layout = QHBoxLayout(actions_widget)
         actions_layout.setContentsMargins(2, 2, 2, 2)
@@ -144,7 +242,7 @@ class StructureTableWidget(QTableWidget):
         if self.is_trash_view:
             trash_btn = make_icon_btn("restore", "Restore")
         else:
-            trash_btn = make_icon_btn("trash", "Move to trash")
+            trash_btn = make_icon_btn("trash", "Move to trash", icon_color="#e74c3c", hover_color="231, 76, 60")
         trash_btn.setFocusPolicy(Qt.NoFocus)
         trash_btn.clicked.connect(
             lambda checked=False, idx=original_index: self.manager.toggle_trash_status(
@@ -154,13 +252,8 @@ class StructureTableWidget(QTableWidget):
         actions_layout.addWidget(trash_btn)
 
         if self.is_trash_view:
-            delete_btn = make_icon_btn("trash", "Delete permanently")
+            delete_btn = make_icon_btn("trash", "Delete permanently", icon_color="#e74c3c", hover_color="192, 57, 43")
             delete_btn.setFocusPolicy(Qt.NoFocus)
-            delete_btn.setStyleSheet(
-                "QPushButton { border-radius: 14px; padding: 0px; border: none; background: transparent; }"
-                "QPushButton:hover { border-radius: 14px; padding: 0px; background: rgba(192, 57, 43, 40); }"
-                "QPushButton:pressed { border-radius: 14px; padding: 0px; background: rgba(192, 57, 43, 80); }"
-            )
             delete_btn.clicked.connect(
                 lambda checked=False, idx=original_index: self._confirm_permanent_delete(idx)
             )
@@ -169,7 +262,7 @@ class StructureTableWidget(QTableWidget):
         if self._frozen:
             for btn in actions_widget.findChildren(QPushButton):
                 btn.setEnabled(False)
-        self.setCellWidget(row, 5, actions_widget)
+        self.setCellWidget(row, 6, actions_widget)
 
         self.blockSignals(False)
         self.update_height()
@@ -178,7 +271,7 @@ class StructureTableWidget(QTableWidget):
         """Disable/enable action buttons in every row."""
         self._frozen = frozen
         for row in range(self.rowCount()):
-            container = self.cellWidget(row, 5)
+            container = self.cellWidget(row, 6)
             if container:
                 for btn in container.findChildren(QPushButton):
                     btn.setEnabled(not frozen)
@@ -186,16 +279,20 @@ class StructureTableWidget(QTableWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         total = self.viewport().width()
-        min_w = 100
+        action_w = 80
+        rest = max(1, total - action_w)
 
-        # Proportional widths (must all be >= min_w)
+        # Qty sub-columns are equal width so the "Qty" spanning label is centred
+        qty_sub = max(45, int(rest * 0.08))
+
         widths = {
-            0: max(min_w, int(total * 0.32)),  # Work Name
-            1: max(min_w, int(total * 0.12)),  # Rate
-            2: max(min_w, int(total * 0.10)),  # Qty
-            3: max(min_w, int(total * 0.16)),  # Source
-            4: max(min_w, int(total * 0.12)),  # Total
-            5: max(min_w, int(total * 0.18)),  # Actions
+            0: max(150, int(rest * 0.35)),  # Work Name
+            1: max(70,  int(rest * 0.13)),  # Rate
+            2: qty_sub,                     # Qty › Value
+            3: qty_sub,                     # Qty › Unit
+            4: max(70,  int(rest * 0.15)),  # Source
+            5: max(75,  int(rest * 0.19)),  # Total
+            6: action_w,                    # Actions — fixed
         }
 
         for col, width in widths.items():

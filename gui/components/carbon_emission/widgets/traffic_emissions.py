@@ -83,14 +83,17 @@ class _EmissionsTable(QTableWidget):
         self._vpd_items: dict[str, QTableWidgetItem] = {}
         self._emission_items: dict[str, QTableWidgetItem] = {}
 
-        self.setHorizontalHeaderLabels(
-            [
-                "Vehicle Type",
-                "Vehicles / Day",
-                "Emission Factor\n(kgCO₂e/veh-km/day)",
-                "Emissions\n(kgCO₂e/day)",
-            ]
-        )
+        _L = Qt.AlignLeft  | Qt.AlignVCenter
+        _R = Qt.AlignRight | Qt.AlignVCenter
+        for col, (label, align) in enumerate([
+            ("Vehicle Type",                         _L),
+            ("Vehicles / Day",                       _R),
+            ("Emission Factor\n(kgCO₂e/veh-km/day)", _R),
+            ("Emissions\n(kgCO₂e/day)",              _R),
+        ]):
+            item = QTableWidgetItem(label)
+            item.setTextAlignment(align)
+            self.setHorizontalHeaderItem(col, item)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.verticalHeader().setVisible(False)
         self.verticalHeader().setDefaultSectionSize(36)

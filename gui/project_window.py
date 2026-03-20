@@ -425,7 +425,6 @@ class ProjectWindow(QMainWindow):
         home_action.triggered.connect(self.show_home)
 
         self.log_action = QAction("Logs", self)
-        self.log_action.setIcon(make_icon("list"))
 
         self.menubar.addAction(home_action)
         self.menubar.addMenu(self.menuFile)
@@ -438,8 +437,6 @@ class ProjectWindow(QMainWindow):
         top_bar_layout.addWidget(self.save_status_bar)
 
         self.btn_calculate = QPushButton("Calculate")
-        self.btn_calculate.setIcon(make_icon("bolt"))
-        self.btn_calculate.setIconSize(QSize(16, 16))
         self.btn_calculate.clicked.connect(self._run_calculate)
         top_bar_layout.addWidget(self.btn_calculate)
 
