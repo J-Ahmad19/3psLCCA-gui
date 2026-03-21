@@ -16,7 +16,7 @@ A desktop application built with Python and PySide6 for performing Life Cycle Co
 **1. Clone the repository**
 
 ```bash
-git clone -b master-con https://github.com/swas02/3psLCCA-gui.git
+git clone https://github.com/swas02/3psLCCA-gui.git
 cd 3psLCCA-gui
 ```
 
