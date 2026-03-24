@@ -21,7 +21,7 @@ from gui.theme import FS_SM, FW_SEMIBOLD
 
 _HDR_FONT = QFont("Ubuntu", FS_SM, FW_SEMIBOLD)
 
-_ACTION_W = 100  # fixed Action column width
+_ACTION_W = 80  # fixed Action column width
 _ROW_H = 50  # row height — 11 px clearance top + bottom around 28 px button
 
 

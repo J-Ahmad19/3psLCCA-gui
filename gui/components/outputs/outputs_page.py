@@ -20,12 +20,20 @@ from gui.components.base_widget import ScrollableForm
 from gui.components.utils.form_builder.form_definitions import ValidationStatus
 
 CHUNK = "outputs_data"
+DEBUG = False
+
+def _dbg(*args):
+    if DEBUG:
+        import inspect
+        caller = inspect.stack()[1].function
+        print(f"[OUTPUTS DEBUG | {caller}]", *args)
 
 
 class OutputsPage(ScrollableForm):
 
     navigate_requested = Signal(str)
     calculation_completed = Signal()   # emitted after a successful calculation
+    validate_requested = Signal()      # emitted when user clicks Validate — project_window handles it
 
     def __init__(self, controller=None):
         super().__init__(controller=controller, chunk_name=CHUNK)
@@ -49,7 +57,7 @@ class OutputsPage(ScrollableForm):
         self.btn_calculate = QPushButton("Validate  ▶")
         self.btn_calculate.setMinimumHeight(38)
         self.btn_calculate.setFixedWidth(160)
-        self.btn_calculate.clicked.connect(self.run_validation)
+        self.btn_calculate.clicked.connect(self.validate_requested.emit)
         btn_layout.addWidget(self.btn_calculate)
         btn_layout.addStretch()
         f.addRow(btn_row)
@@ -138,17 +146,22 @@ class OutputsPage(ScrollableForm):
             for name, page in widget_map.items()
             if name != "Outputs" and hasattr(page, "validate")
         }
+        _dbg(f"Registered pages: {list(self._pages.keys())}")
 
     def run_validation(self):
+        _dbg("=== run_validation START ===")
         all_errors = {}
         all_warnings = {}
 
         for name, page in self._pages.items():
+            _dbg(f"Validating page: '{name}' ({type(page).__name__})")
             result = page.validate()
+            _dbg(f"  result type={type(result).__name__}  value={result!r}")
 
             if isinstance(result, dict):
                 errors = result.get("errors", [])
                 warnings = result.get("warnings", [])
+                _dbg(f"  dict-format => errors={errors}  warnings={warnings}")
                 if errors:
                     all_errors[name] = errors
                 if warnings:
@@ -156,10 +169,13 @@ class OutputsPage(ScrollableForm):
             else:
                 # legacy tuple format (status, issues)
                 status, issues = result
+                _dbg(f"  tuple-format => status={status}  issues={issues}")
                 if status == ValidationStatus.ERROR and issues:
                     all_errors[name] = issues
                 elif status == ValidationStatus.WARNING and issues:
                     all_warnings[name] = issues
+
+        _dbg(f"Validation done => all_errors={list(all_errors.keys())}  all_warnings={list(all_warnings.keys())}")
 
         if all_errors or all_warnings:
             self.show_results(all_errors, all_warnings)
@@ -168,24 +184,42 @@ class OutputsPage(ScrollableForm):
             self.run_calculation()
 
     def run_calculation(self):
+        _dbg("=== run_calculation START ===")
+        _dbg(f"self._pages at entry: {list(self._pages.keys())}")
         all_data = {}
         for name, page in self._pages.items():
-            if hasattr(page, "get_data"):
+            has_get = hasattr(page, "get_data")
+            _dbg(f"  page='{name}'  has_get_data={has_get}")
+            if has_get:
                 result = page.get_data()
-                all_data[result["chunk"]] = result["data"]
+                chunk_key = result["chunk"]
+                _dbg(f"    chunk_key='{chunk_key}'  data_keys={list(result['data'].keys()) if isinstance(result['data'], dict) else type(result['data']).__name__}")
+                all_data[chunk_key] = result["data"]
+
+        _dbg(f"all_data keys collected: {list(all_data.keys())}")
 
         try:
+            _dbg("Calling _prepare_data_object ...")
             is_global, data_object = self._prepare_data_object(all_data)
+            _dbg(f"  is_global={is_global}  data_object type={type(data_object).__name__}")
+
             wpi_metadata = None
             if not is_global:
+                _dbg("Calling _prepare_wpi_object ...")
                 wpi_metadata = self._prepare_wpi_object(all_data)
-            life_cycle_construction_cost_breakdown = self._prepare_life_cycle_construction_cost(all_data)
+                _dbg(f"  wpi_metadata={wpi_metadata!r}")
 
+            _dbg("Calling _prepare_life_cycle_construction_cost ...")
+            life_cycle_construction_cost_breakdown = self._prepare_life_cycle_construction_cost(all_data)
+            _dbg(f"  lcc_breakdown={life_cycle_construction_cost_breakdown}")
+
+            _dbg("Calling run_full_lcc_analysis ...")
             from three_ps_lcca_core.core.main import run_full_lcc_analysis
             results = run_full_lcc_analysis(
                 data_object, life_cycle_construction_cost_breakdown, wpi=wpi_metadata, debug=True
             )
-            print(results)
+            _dbg(f"run_full_lcc_analysis returned keys: {list(results.keys()) if isinstance(results, dict) else type(results).__name__}")
+            _dbg(f"results: {results}")
             self._last_all_data = all_data
             self._last_lcc_breakdown = life_cycle_construction_cost_breakdown
             self._show_calculation_success(results)
@@ -193,7 +227,7 @@ class OutputsPage(ScrollableForm):
         except Exception as e:
             import traceback
             tb = traceback.format_exc()
-            print(f"[CALCULATION ERROR] {type(e).__name__}: {e}\n{tb}")
+            _dbg(f"[CALCULATION ERROR] {type(e).__name__}: {e}\n{tb}")
             self._show_calculation_error(e, tb)
 
     def _show_calculation_error(self, error: Exception, tb: str = ""):
@@ -319,19 +353,31 @@ class OutputsPage(ScrollableForm):
                     "total_scrap_value": 2164095.02,
                 }
         """
+        _dbg("=== _prepare_life_cycle_construction_cost START ===")
         carbon_emissions  = data.get("carbon_emission_data")
-        carbon_cost_per_kg = carbon_emissions.get("social_cost_data").get("result").get("cost_of_carbon_local")
+        _dbg(f"  carbon_emission_data keys: {list(carbon_emissions.keys()) if carbon_emissions else 'MISSING'}")
 
-        total_kgCO2e = (
-              float(carbon_emissions.get("material_emissions_data").get("total_kgCO2e"))    # Embodied carbon of materials used
-            + float(carbon_emissions.get("transport_emissions_data").get("total_kgCO2e"))   # Emissions from transporting materials to site
-            + float(carbon_emissions.get("machinery_emissions_data").get("total_kgCO2e"))   # Emissions from construction machinery (fuel/electricity)
-        )
+        carbon_cost_per_kg = carbon_emissions.get("social_cost_data").get("result").get("cost_of_carbon_local")
+        _dbg(f"  carbon_cost_per_kg={carbon_cost_per_kg!r}")
+
+        mat_co2   = float(carbon_emissions.get("material_emissions_data").get("total_kgCO2e"))
+        trans_co2 = float(carbon_emissions.get("transport_emissions_data").get("total_kgCO2e"))
+        mach_co2  = float(carbon_emissions.get("machinery_emissions_data").get("total_kgCO2e"))
+        total_kgCO2e = mat_co2 + trans_co2 + mach_co2
+        _dbg(f"  material_kgCO2e={mat_co2}  transport_kgCO2e={trans_co2}  machinery_kgCO2e={mach_co2}  total_kgCO2e={total_kgCO2e}")
+
+        construction_work_data = data.get("construction_work_data")
+        _dbg(f"  construction_work_data keys: {list(construction_work_data.keys()) if construction_work_data else 'MISSING'}")
+        grand_total = float(construction_work_data.get("grand_total"))
+        super_total = float(construction_work_data.get("Super Structure").get("total"))
+        scrap_value = float(data.get("recycling_data").get("total_recovered_value"))
+        _dbg(f"  grand_total={grand_total}  super_total={super_total}  scrap_value={scrap_value}")
+
         return {
-            "initial_construction_cost": float(data.get("construction_work_data").get("grand_total")),
+            "initial_construction_cost": grand_total,
             "initial_carbon_emissions_cost": total_kgCO2e * carbon_cost_per_kg,
-            "superstructure_construction_cost": float(data.get("construction_work_data").get("Super Structure").get("total")),
-            "total_scrap_value": float(data.get("recycling_data").get("total_recovered_value")),
+            "superstructure_construction_cost": super_total,
+            "total_scrap_value": scrap_value,
         }
 
         
@@ -339,12 +385,16 @@ class OutputsPage(ScrollableForm):
         """
         This function creates a WPI object using the data from saved chunks.
         """
+        _dbg("=== _prepare_wpi_object START ===")
         from three_ps_lcca_core.inputs.wpi import WPIMetaData
 
         wpi_data = data.get("traffic_and_road_data").get("wpi")
+        _dbg(f"  wpi_data keys: {list(wpi_data.keys()) if wpi_data else 'MISSING'}")
         wpi_dict = wpi_data.get("data_snapshot").get("ratio")
+        _dbg(f"  wpi_dict (first 3 keys): { {k: wpi_dict[k] for k in list(wpi_dict)[:3]} if wpi_dict else 'MISSING' }")
         year = int(wpi_data.get("selected_profile_year") or wpi_data.get("selected_profile_name", 0))
-        
+        _dbg(f"  year={year}")
+
         return WPIMetaData.from_dict(
             {
                 "year": year,
@@ -384,7 +434,11 @@ class OutputsPage(ScrollableForm):
         )
 
         #--------------Prepare-General-Parameters-Start-------------------------------------------------
+        _dbg("=== _prepare_data_object START ===")
+        _dbg(f"  all_data keys present: {list(data.keys())}")
+
         _financial_data = data.get("financial_data")
+        _dbg(f"  financial_data: {_financial_data!r}")
         if _financial_data is None:
             raise ValueError(
                 "Financial Data is missing from the calculation inputs.\n"
@@ -396,21 +450,27 @@ class OutputsPage(ScrollableForm):
         inflation_rate_percent            = float(_financial_data.get("inflation_rate"))
         interest_rate_percent             = float(_financial_data.get("interest_rate"))
         investment_ratio                  = float(_financial_data.get("investment_ratio"))
+        _dbg(f"  financial => analysis_period={analysis_period_years}  discount={discount_rate_percent}  inflation={inflation_rate_percent}  interest={interest_rate_percent}  inv_ratio={investment_ratio}")
 
         # cost_of_carbon_local is in local_currency/kgCO2e (user-selected source).
         # The engine expects social_cost_of_carbon_per_mtco2e in local_currency/mtCO2e,
         # so multiply by 1000. currency_conversion is 1.0 — cost is already in local currency.
         _result = data.get("carbon_emission_data").get("social_cost_data").get("result")
+        _dbg(f"  social_cost_data result: {_result!r}")
         social_cost_of_carbon_per_mtco2e  = float(_result.get("cost_of_carbon_local")) * 1000
         currency_conversion               = 1.0
+        _dbg(f"  social_cost_of_carbon_per_mtco2e={social_cost_of_carbon_per_mtco2e}")
 
         _bridge_data = data.get("bridge_data")
+        _dbg(f"  bridge_data: {_bridge_data!r}")
         service_life_years                = int(_bridge_data.get("design_life"))
         construction_period_months        = float(_bridge_data.get("duration_construction_months"))
         working_days_per_month            = float(_bridge_data.get("working_days_per_month"))
         days_per_month                    = float(_bridge_data.get("days_per_month"))
+        _dbg(f"  bridge => service_life={service_life_years}  construction_months={construction_period_months}  working_days={working_days_per_month}  days_per_month={days_per_month}")
 
         use_global_road_user_calculations = data.get("traffic_and_road_data").get("mode") == "GLOBAL"
+        _dbg(f"  traffic mode='{data.get('traffic_and_road_data').get('mode')}'  use_global={use_global_road_user_calculations}")
 
         general_parameters=GeneralParameters(
             service_life_years                = service_life_years,
@@ -431,6 +491,8 @@ class OutputsPage(ScrollableForm):
         #--------------Prepare-Maintenance-&-EOL-Start-------------------------------------------------
         _maintenance_data = data.get("maintenance_data")
         _demolition_data = data.get("demolition_data")
+        _dbg(f"  maintenance_data: {_maintenance_data!r}")
+        _dbg(f"  demolition_data: {_demolition_data!r}")
 
         routine_inspection_picc_per_year      = float(_maintenance_data.get("routine_inspection_cost"))
         routine_inspection_interval_in_years  = int(_maintenance_data.get("routine_inspection_freq"))
@@ -502,10 +564,14 @@ class OutputsPage(ScrollableForm):
 
         if not use_global_road_user_calculations:
             #------------------------------------Traffic-and-Road-Data-India-Start--------------------------------------------
+            _dbg("Branch: INDIA (non-global) road user calculations")
             _traffic_road_data = data.get("traffic_and_road_data")
+            _dbg(f"  traffic_road_data keys: {list(_traffic_road_data.keys()) if _traffic_road_data else 'MISSING'}")
             _traffic_vehicle_data = _traffic_road_data.get("vehicle_data")
+            _dbg(f"  vehicle_data keys: {list(_traffic_vehicle_data.keys()) if _traffic_vehicle_data else 'MISSING'}")
             _ef = data.get("carbon_emission_data", {}).get("diversion_emissions", {}).get("emission_factors", {})
             _emission_factors = {k: float(v or 0.0) for k, v in _ef.items()}
+            _dbg(f"  emission_factors: {_emission_factors}")
 
             small_cars    = VehicleMetaData(
                                 int(_traffic_vehicle_data.get("small_cars").get("vehicles_per_day")),
@@ -601,6 +667,12 @@ class OutputsPage(ScrollableForm):
             )
             #------------------------------------Traffic-and-Road-Data-India-End--------------------------------------------
         
+            _dbg(f"  severity => minor={minor}  major={major}  fatal={fatal}")
+            _dbg(f"  road => carriageway='{alternate_road_carriageway}'  width={carriage_width_in_m}  roughness={road_roughness_mm_per_km}  rise={road_rise_m_per_km}  fall={road_fall_m_per_km}")
+            _dbg(f"  diversion => reroute_km={additional_reroute_distance_km}  travel_time_min={additional_travel_time_min}  crash_rate={crash_rate_accidents_per_million_km}")
+            _dbg(f"  work_zone_multiplier={work_zone_multiplier}  hourly_capacity={hourly_capacity}  force_free_flow={force_free_flow_off_peak}")
+            _dbg(f"  peak_hour_distribution (sum)={sum(peak_hour_traffic_percent_per_hour):.4f}")
+            _dbg("Building InputMetaData (India) ...")
             object = InputMetaData(
                 general_parameters               = general_parameters,
                 traffic_and_road_data            = traffic_and_road_data,
@@ -608,13 +680,18 @@ class OutputsPage(ScrollableForm):
             )
         else:
             #------------------------------------Traffic-and-Road-Data-Global-Start--------------------------------------------
-            _diversion = data.get("carbon_emission_data", {}).get("diversion_emissions", {})
+            _dbg("Branch: GLOBAL road user calculations")
+            _global_diversion = data.get("carbon_emission_data", {}).get("diversion_emissions", {})
+            _dbg(f"  diversion_emissions keys: {list(_global_diversion.keys()) if _global_diversion else 'MISSING'}")
+            _dbg(f"  diversion mode: {_global_diversion.get('mode')!r}")
             if _diversion.get("mode") == "Calculate by Vehicle":
                 total_vehicular_carbon_emission = float(_diversion.get("total_calculated_emissions", 0.0))
             else:
                 total_vehicular_carbon_emission = float(_diversion.get("total_direct_emissions", 0.0))
+            _dbg(f"  total_vehicular_carbon_emission={total_vehicular_carbon_emission}")
             total_daily_ruc = float(data.get("traffic_and_road_data").get("road_user_cost_per_day"))
-            
+            _dbg(f"  total_daily_ruc={total_daily_ruc}")
+
             daily_road_user_cost_with_vehicular_emissions=DailyRoadUserCost(
                 total_daily_ruc=total_daily_ruc,
                 total_carbon_emission=TotalCarbonEmission(
@@ -623,12 +700,14 @@ class OutputsPage(ScrollableForm):
             )
             #------------------------------------Traffic-and-Road-Data-Global-End--------------------------------------------
 
+            _dbg("Building InputGlobalMetaData ...")
             object = InputGlobalMetaData(
                 general_parameters                            = general_parameters,
                 daily_road_user_cost_with_vehicular_emissions = daily_road_user_cost_with_vehicular_emissions,
                 maintenance_and_stage_parameters              = maintenance_and_stage_parameters,
             )
         
+        _dbg(f"=== _prepare_data_object END => returning is_global={use_global_road_user_calculations}  object={type(object).__name__} ===")
         return use_global_road_user_calculations, object
     #===================================================================================
 
@@ -768,10 +847,12 @@ class OutputsPage(ScrollableForm):
 
     def on_refresh(self):
         if not self.controller or not self.controller.engine:
+            _dbg("on_refresh: no controller/engine, skipping")
             return
         state = self.controller.engine.fetch_chunk(CHUNK) or {}
         status = state.get("status", "idle")
         data = state.get("data", {})
+        _dbg(f"on_refresh: status='{status}'  data_keys={list(data.keys()) if isinstance(data, dict) else type(data).__name__}")
         if status == "issues":
             self.show_results(data.get("errors", {}), data.get("warnings", {}))
         elif status == "success":

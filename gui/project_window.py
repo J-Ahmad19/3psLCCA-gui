@@ -495,6 +495,7 @@ class ProjectWindow(QMainWindow):
         self.outputs_page = OutputsPage(controller=self.controller)
         self.outputs_page.navigate_requested.connect(self._navigate_to_page)
         self.outputs_page.calculation_completed.connect(self._on_calculation_done)
+        self.outputs_page.validate_requested.connect(self._run_calculate)
 
         # Page widgets are built lazily on first sidebar click via _get_or_create_widget
         self.widget_map = {"Outputs": self.outputs_page}

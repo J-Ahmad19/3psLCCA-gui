@@ -14,8 +14,11 @@ Currency label pulled from general_info chunk.
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
+    QGraphicsDropShadowEffect,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -32,18 +35,20 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, QEvent, QRect, QSize
+from PySide6.QtGui import QColor, QFont
 
 from ...base_widget import ScrollableForm
 from ...utils.form_builder.form_definitions import FieldDef, Section
 from ...utils.form_builder.form_builder import build_form
 from ...utils.remarks_editor import RemarksEditor
 from ...utils.display_format import fmt, fmt_comma, DECIMAL_PLACES
-from ...utils.icons import make_icon_btn
+from ...utils.icons import make_icon
+from ...utils.table_widgets import BaseActionDelegate
 from ...utils.validation_helpers import freeze_widgets
 
 CHUNK = "machinery_emissions_data"
+_ACTION_W = 80   # frozen action-column width (edit + delete)
 BASE_DOCS_URL = "https://yourdocs.com/carbon/machinery/"
 
 ENERGY_SOURCES = [
@@ -211,135 +216,194 @@ DETAILED_FIELDS = [
 ]
 
 
-# ── Equipment row ─────────────────────────────────────────────────────────────
+# ── Action delegate — paints edit + delete icon buttons ───────────────────────
 
 
-class _EquipmentRow:
-    """All cell widgets for one equipment table row."""
+class _ActionDelegate(BaseActionDelegate):
+    """Paints circular Edit and Delete buttons in the frozen action column."""
 
-    def __init__(self, on_change, on_delete):
-        self.name = QLineEdit()
-        self.name.setPlaceholderText("Equipment name")
-        self.name.textChanged.connect(on_change)
+    BTN_GAP = 8
 
-        self.source = QComboBox()
-        self.source.addItems(ENERGY_SOURCES)
-        self.source.currentIndexChanged.connect(self._on_source_changed)
-        self.source.currentIndexChanged.connect(on_change)
+    def __init__(self, table, detail_table):
+        super().__init__(table)
+        self._detail_table = detail_table
+        self._btns = [
+            (make_icon("edit"), (46, 204, 113), "edit", "Edit"),
+            (make_icon("trash", color="#e74c3c"), (231, 76, 60), "delete", "Remove row"),
+        ]
 
-        self.rate = QDoubleSpinBox()
-        self.rate.setRange(0.0, 99999.0)
-        self.rate.setDecimals(DECIMAL_PLACES)
-        self.rate.setButtonSymbols(QDoubleSpinBox.NoButtons)
-        self.rate.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.rate.valueChanged.connect(on_change)
+    def _get_btns_for_row(self, row) -> list[tuple]:
+        return [(icon, hover_rgb, tooltip) for icon, hover_rgb, _, tooltip in self._btns]
 
-        self.hrs = QDoubleSpinBox()
-        self.hrs.setRange(0.0, 24.0)
-        self.hrs.setDecimals(DECIMAL_PLACES)
-        self.hrs.setButtonSymbols(QDoubleSpinBox.NoButtons)
-        self.hrs.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.hrs.valueChanged.connect(on_change)
+    def _btn_rects(self, cell_rect, n):
+        """Center all buttons horizontally within the cell."""
+        total_w = n * self.BTN_SIZE + (n - 1) * self.BTN_GAP
+        x0 = cell_rect.x() + (cell_rect.width() - total_w) // 2
+        y = cell_rect.y() + (cell_rect.height() - self.BTN_SIZE) // 2
+        return [
+            QRect(x0 + i * (self.BTN_SIZE + self.BTN_GAP), y, self.BTN_SIZE, self.BTN_SIZE)
+            for i in range(n)
+        ]
 
-        self.days = QSpinBox()
-        self.days.setRange(0, 9999)
-        self.days.setButtonSymbols(QSpinBox.NoButtons)
-        self.days.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.days.valueChanged.connect(on_change)
+    def sizeHint(self, option, index):
+        return QSize(_ACTION_W, _DetailedTable._ROW_H)
 
-        self.ef = QDoubleSpinBox()
-        self.ef.setRange(0.0, 999.0)
-        self.ef.setDecimals(DECIMAL_PLACES)
-        self.ef.setButtonSymbols(QDoubleSpinBox.NoButtons)
-        self.ef.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.ef.valueChanged.connect(on_change)
+    def editorEvent(self, event, model, option, index):
+        if self._frozen:
+            return False
+        if event.type() == QEvent.MouseButtonRelease:
+            rects = self._btn_rects(option.rect, len(self._btns))
+            for i, (_, _, action, *__) in enumerate(self._btns):
+                if rects[i].contains(event.pos()):
+                    if action == "edit":
+                        self._detail_table._open_edit_dialog(index.row())
+                    elif action == "delete":
+                        self._detail_table._delete_row(index.row())
+                    return True
+        return False
 
-        self.consumption_item = QTableWidgetItem(fmt(0.0))
-        self.consumption_item.setFlags(Qt.ItemIsEnabled)
-        self.consumption_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
-        self.emissions_item = QTableWidgetItem(fmt(0.0))
-        self.emissions_item.setFlags(Qt.ItemIsEnabled)
-        self.emissions_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+# ── Edit row dialog ────────────────────────────────────────────────────────────
 
-        self.btn_delete = make_icon_btn("trash", "Remove this row", icon_color="#e74c3c", hover_color="192, 57, 43")
-        self.btn_delete.clicked.connect(on_delete)
 
-        # Blank row: suffix only, EF stays 0 until user picks source
-        self._is_new = True
-        self._loading = False
-        self.rate.setSuffix(RATE_SUFFIX.get(ENERGY_SOURCES[0], ""))
+class _EditRowDialog(QDialog):
+    """Dialog for editing a single equipment row's fields."""
 
-    def _on_source_changed(self):
-        src = self.source.currentText()
-        self.rate.setSuffix(RATE_SUFFIX.get(src, ""))
-        if not self._loading:
-            self._is_new = False
-            self.ef.blockSignals(True)
-            self.ef.setValue(EF_DEFAULTS.get(src, 0.0))
-            self.ef.blockSignals(False)
+    def __init__(self, row_data: dict, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Edit Equipment")
+        self.setMinimumWidth(400)
 
-    def recalculate(self) -> float:
-        consumption = self.rate.value() * self.hrs.value() * self.days.value()
-        emissions = consumption * self.ef.value()
-        src = self.source.currentText()
-        unit = CONSUMPTION_UNIT.get(src, "units")
-        self.consumption_item.setText(f"{fmt_comma(consumption)} {unit}")
-        self.emissions_item.setText(fmt_comma(emissions))
-        return emissions
+        layout = QFormLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(16, 16, 16, 16)
 
-    def freeze(self, frozen: bool = True):
-        self.name.setReadOnly(frozen)
-        self.source.setEnabled(not frozen)
-        self.rate.setEnabled(not frozen)
-        self.hrs.setEnabled(not frozen)
-        self.days.setEnabled(not frozen)
-        self.ef.setEnabled(not frozen)
-        freeze_widgets(frozen, self.btn_delete)
+        self._name = QLineEdit(row_data.get("name", ""))
 
-    def to_dict(self) -> dict:
+        self._source = QComboBox()
+        self._source.addItems(ENERGY_SOURCES)
+        src = row_data.get("source", ENERGY_SOURCES[0])
+        self._source.setCurrentIndex(max(0, self._source.findText(src)))
+
+        self._rate = QDoubleSpinBox()
+        self._rate.setRange(0.0, 1e9)
+        self._rate.setDecimals(DECIMAL_PLACES)
+        self._rate.setValue(row_data.get("rate", 0.0))
+        self._rate.setSuffix(RATE_SUFFIX.get(src, " units/hr"))
+
+        self._hrs = QDoubleSpinBox()
+        self._hrs.setRange(0.0, 24.0)
+        self._hrs.setDecimals(DECIMAL_PLACES)
+        self._hrs.setValue(row_data.get("hrs", 0.0))
+        self._hrs.setSuffix(" hrs/day")
+
+        self._days = QSpinBox()
+        self._days.setRange(0, 9999)
+        self._days.setValue(row_data.get("days", 0))
+        self._days.setSuffix(" days")
+
+        self._ef = QDoubleSpinBox()
+        self._ef.setRange(0.0, 999.0)
+        self._ef.setDecimals(DECIMAL_PLACES)
+        self._ef.setValue(row_data.get("ef", 0.0))
+        self._ef.setSuffix(" kg CO₂e/unit")
+
+        layout.addRow("Equipment Name:", self._name)
+        layout.addRow("Energy Source:", self._source)
+        layout.addRow("Fuel / Power Rating:", self._rate)
+        layout.addRow("Avg Hrs/Day:", self._hrs)
+        layout.addRow("No. of Days:", self._days)
+        layout.addRow("EF:", self._ef)
+
+        self._source.currentTextChanged.connect(self._on_source_changed)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addRow(buttons)
+
+    def _on_source_changed(self, src: str):
+        self._rate.setSuffix(RATE_SUFFIX.get(src, " units/hr"))
+        self._ef.setValue(EF_DEFAULTS.get(src, 0.0))
+
+    def get_values(self) -> dict:
         return {
-            "name": self.name.text(),
-            "source": self.source.currentText(),
-            "rate": float(self.rate.value()),
-            "hrs": float(self.hrs.value()),
-            "days": int(self.days.value()),
-            "ef": float(self.ef.value()),
+            "name": self._name.text().strip(),
+            "source": self._source.currentText(),
+            "rate": self._rate.value(),
+            "hrs": self._hrs.value(),
+            "days": self._days.value(),
+            "ef": self._ef.value(),
         }
 
-    def load_dict(self, d: dict):
-        self._loading = True
-        self._is_new = False
-        try:
-            src = d.get("source", "Diesel")
 
-            self.name.blockSignals(True)
-            self.name.setText(str(d.get("name", "")))
-            self.name.blockSignals(False)
+# ── Frozen delete-button column overlay ───────────────────────────────────────
 
-            idx = self.source.findText(src)
-            self.source.blockSignals(True)
-            self.source.setCurrentIndex(max(0, idx))
-            self.source.blockSignals(False)
 
-            self.rate.setSuffix(RATE_SUFFIX.get(src, ""))
-            self.rate.blockSignals(True)
-            self.rate.setValue(float(d.get("rate", 0.0)))
-            self.rate.blockSignals(False)
+class _FrozenActionCol(QTableWidget):
+    """Delete-button column pinned to the right edge of the table, never scrolls."""
 
-            self.hrs.blockSignals(True)
-            self.hrs.setValue(float(d.get("hrs", 0.0)))
-            self.hrs.blockSignals(False)
+    def __init__(self, parent_table: QTableWidget, row_h: int):
+        super().__init__(parent_table)
+        self._parent_table = parent_table
+        self._row_h = row_h
 
-            self.days.blockSignals(True)
-            self.days.setValue(int(d.get("days", 0)))
-            self.days.blockSignals(False)
+        self.setColumnCount(1)
+        hdr_item = QTableWidgetItem("Action")
+        hdr_item.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
+        self.setHorizontalHeaderItem(0, hdr_item)
 
-            self.ef.blockSignals(True)
-            self.ef.setValue(float(d.get("ef", 0.0)))
-            self.ef.blockSignals(False)
-        finally:
-            self._loading = False
+        self.setFixedWidth(_ACTION_W)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.setFocusPolicy(Qt.NoFocus)
+        self.setSelectionMode(QTableWidget.NoSelection)
+        self.setFrameShape(QTableWidget.NoFrame)
+        self.setStyleSheet(
+            "QTableWidget { border-top-left-radius: 0px; border-bottom-left-radius: 0px; }"
+        )
+
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(6)
+        shadow.setOffset(-3, 0)
+        shadow.setColor(QColor(0, 0, 0, 40))
+        self.setGraphicsEffect(shadow)
+
+        self.verticalHeader().setVisible(False)
+        self.verticalHeader().setDefaultSectionSize(row_h)
+        self.verticalHeader().setMinimumSectionSize(row_h)
+
+        hdr = self.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.Fixed)
+        self.setColumnWidth(0, _ACTION_W)
+
+        parent_table.verticalScrollBar().valueChanged.connect(
+            self.verticalScrollBar().setValue
+        )
+
+    def sync_row_heights(self):
+        for r in range(self.rowCount()):
+            self.setRowHeight(r, self._parent_table.rowHeight(r))
+
+    def add_row(self):
+        row = self.rowCount()
+        self.insertRow(row)
+        self.setRowHeight(row, self._row_h)
+        item = QTableWidgetItem()
+        item.setData(Qt.UserRole, row)
+        item.setFlags(Qt.ItemIsEnabled)
+        self.setItem(row, 0, item)
+
+    def reposition(self):
+        p = self._parent_table
+        hdr_h = p.horizontalHeader().height()
+        self.horizontalHeader().setFixedHeight(hdr_h)
+        vp = p.viewport()
+        x = p.width() - _ACTION_W
+        y = vp.y() - hdr_h
+        self.move(x, y)
+        self.setFixedHeight(p.viewport().height() + hdr_h)
 
 
 # ── Detailed equipment table ──────────────────────────────────────────────────
@@ -355,7 +419,8 @@ class _DetailedTable(QWidget):
         ("EF (kg CO₂e/unit)",   Qt.AlignRight  | Qt.AlignVCenter),  # 5
         ("Consumption",         Qt.AlignRight  | Qt.AlignVCenter),  # 6
         ("Emissions (kg CO₂e)", Qt.AlignRight  | Qt.AlignVCenter),  # 7
-        ("",                    Qt.AlignCenter),                     # 8 delete
+        ("Action",              Qt.AlignCenter | Qt.AlignVCenter),  # 8 hidden — frozen overlay
+        ("",                    Qt.AlignCenter | Qt.AlignVCenter),  # 9 placeholder — reserves _ACTION_W
     ]
     _ROW_H = 36
     _HEADER_H = 38  # fallback if header not yet painted
@@ -363,7 +428,6 @@ class _DetailedTable(QWidget):
     def __init__(self, on_change, default_days: QSpinBox, parent=None):
         super().__init__(parent)
         self._on_change = on_change
-        self._rows: list[_EquipmentRow] = []
         self._default_days = default_days
         self._cached_total: float = 0.0  # updated by _recalculate, read by get_total
 
@@ -378,19 +442,33 @@ class _DetailedTable(QWidget):
             item.setTextAlignment(align)
             self._table.setHorizontalHeaderItem(col, item)
         hh = self._table.horizontalHeader()
-        hh.setSectionResizeMode(0, QHeaderView.Stretch)
-        for col in range(1, len(self.HEADERS) - 1):
-            hh.setSectionResizeMode(col, QHeaderView.ResizeToContents)
-        hh.setSectionResizeMode(len(self.HEADERS) - 1, QHeaderView.Fixed)
-        hh.resizeSection(len(self.HEADERS) - 1, 40)
+        hh.setSectionResizeMode(QHeaderView.Interactive)
+        hh.setStretchLastSection(False)
+        hh.setMinimumSectionSize(60)
+        hh.setSectionResizeMode(7, QHeaderView.Stretch)  # Emissions fills remaining space
+        hh.setSectionResizeMode(8, QHeaderView.Fixed)
+        self._table.setColumnWidth(8, 0)
+        self._table.setColumnHidden(8, True)
+        hh.setSectionResizeMode(9, QHeaderView.Fixed)
+        self._table.setColumnWidth(9, _ACTION_W)
+        self._table.setViewportMargins(0, 0, _ACTION_W, 0)
         self._table.verticalHeader().setVisible(False)
         self._table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self._table.setSelectionMode(QTableWidget.NoSelection)
+        self._table.setSelectionMode(QTableWidget.SingleSelection)
+        self._table.setSelectionBehavior(QTableWidget.SelectRows)
         self._table.verticalHeader().setDefaultSectionSize(self._ROW_H)
+        self._table.cellChanged.connect(self._on_cell_changed)
+        self._table.cellDoubleClicked.connect(self._open_edit_dialog)
         self._table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self._table.setMinimumWidth(0)
         self._table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         layout.addWidget(self._table)
+
+        self._frozen_col = _FrozenActionCol(self._table, self._ROW_H)
+        self._action_delegate = _ActionDelegate(self._frozen_col, self)
+        self._frozen_col.setItemDelegateForColumn(0, self._action_delegate)
+        self._frozen_col.show()
 
         # Subtotals
         sub_layout = QHBoxLayout()
@@ -450,62 +528,144 @@ class _DetailedTable(QWidget):
         self._table.updateGeometry()
         self.updateGeometry()
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if not hasattr(self, "_frozen_col"):
+            return
+        vp_w = self._table.viewport().width()
+        if vp_w <= 0:
+            return
+        # Col 7 (Emissions) is Stretch — only size cols 0–6
+        ratios = {0: 0.22, 1: 0.14, 2: 0.12, 3: 0.10, 4: 0.10, 5: 0.12, 6: 0.14}
+        mins   = {0: 150,   1: 150,   2: 150,   3: 120,   4: 120,   5: 180,   6: 120}
+        col_widths = {c: max(mins[c], int(vp_w * r)) for c, r in ratios.items()}
+        used = sum(col_widths.values())
+        if used >= vp_w:
+            # Scale down to always fit — no horizontal overflow
+            scale = vp_w / used
+            col_widths = {c: max(mins[c], int(w * scale)) for c, w in col_widths.items()}
+        hh = self._table.horizontalHeader()
+        hh.blockSignals(True)
+        for col, width in col_widths.items():
+            self._table.setColumnWidth(col, width)
+        hh.blockSignals(False)
+        self._frozen_col.reposition()
+        self._frozen_col.sync_row_heights()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if hasattr(self, "_frozen_col"):
+            self._frozen_col.reposition()
+
+    # ── Row management ────────────────────────────────────────────────────
+
+    # ── Cell helpers ──────────────────────────────────────────────────────
+
+    def _cell_text(self, row, col, default="") -> str:
+        item = self._table.item(row, col)
+        return item.text().strip() if item else default
+
+    def _cell_float(self, row, col, default=0.0) -> float:
+        try:
+            return float(self._cell_text(row, col, str(default)).replace(",", ""))
+        except (ValueError, TypeError):
+            return default
+
+    def _cell_int(self, row, col, default=0) -> int:
+        try:
+            return int(float(self._cell_text(row, col, str(default)).replace(",", "")))
+        except (ValueError, TypeError):
+            return default
+
+    def _make_item(self, text, align, editable=True) -> QTableWidgetItem:
+        it = QTableWidgetItem(str(text))
+        it.setTextAlignment(align)
+        if not editable:
+            it.setFlags(Qt.ItemIsEnabled)
+        elif self._frozen:
+            it.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+        return it
+
     # ── Row management ────────────────────────────────────────────────────
 
     def _apply_default_days(self):
-        for row in self._rows:
-            row.days.setValue(self._default_days.value())
+        days_val = str(self._default_days.value())
+        self._table.blockSignals(True)
+        for row in range(self._table.rowCount()):
+            item = self._table.item(row, 4)
+            if item:
+                item.setText(days_val)
+        self._table.blockSignals(False)
         self._recalculate()
 
     def _add_blank_row(self, d: dict | None = None):
-        # Use object-identity delete so closures never go stale
-        eq = _EquipmentRow(on_change=self._recalculate, on_delete=lambda: None)
-        eq.btn_delete.clicked.disconnect()
-        eq.btn_delete.clicked.connect(
-            lambda _checked=False, r=eq: self._delete_row_by_ref(r)
-        )
-
-        if d:
-            eq.load_dict(d)
-
-        if self._frozen:
-            eq.freeze(True)
-
+        self._table.blockSignals(True)
         row_idx = self._table.rowCount()
-        self._rows.append(eq)
         self._table.insertRow(row_idx)
         self._table.setRowHeight(row_idx, self._ROW_H)
-        self._table.setCellWidget(row_idx, 0, eq.name)
-        self._table.setCellWidget(row_idx, 1, eq.source)
-        self._table.setCellWidget(row_idx, 2, eq.rate)
-        self._table.setCellWidget(row_idx, 3, eq.hrs)
-        self._table.setCellWidget(row_idx, 4, eq.days)
-        self._table.setCellWidget(row_idx, 5, eq.ef)
-        self._table.setItem(row_idx, 6, eq.consumption_item)
-        self._table.setItem(row_idx, 7, eq.emissions_item)
-        _action = QWidget()
-        _action_layout = QHBoxLayout(_action)
-        _action_layout.setContentsMargins(0, 0, 0, 0)
-        _action_layout.addStretch()
-        _action_layout.addWidget(eq.btn_delete)
-        _action_layout.addStretch()
-        self._table.setCellWidget(row_idx, 8, _action)
+
+        src  = d.get("source", ENERGY_SOURCES[0]) if d else ENERGY_SOURCES[0]
+        _L   = Qt.AlignLeft  | Qt.AlignVCenter
+        _R   = Qt.AlignRight | Qt.AlignVCenter
+
+        self._table.setItem(row_idx, 0, self._make_item(d.get("name", "") if d else "", _L))
+        self._table.setItem(row_idx, 1, self._make_item(src, _L))
+        self._table.setItem(row_idx, 2, self._make_item(d.get("rate", 0.0) if d else 0.0, _R))
+        self._table.setItem(row_idx, 3, self._make_item(d.get("hrs",  0.0) if d else 0.0, _R))
+        self._table.setItem(row_idx, 4, self._make_item(d.get("days", 0)   if d else 0,   _R))
+        self._table.setItem(row_idx, 5, self._make_item(d.get("ef", EF_DEFAULTS.get(src, 0.0)) if d else EF_DEFAULTS.get(src, 0.0), _R))
+        self._table.setItem(row_idx, 6, self._make_item("", _R, editable=False))
+        self._table.setItem(row_idx, 7, self._make_item("", _R, editable=False))
+
+        action_item = QTableWidgetItem()
+        action_item.setData(Qt.UserRole, row_idx)
+        action_item.setFlags(Qt.ItemIsEnabled)
+        self._table.setItem(row_idx, 8, action_item)
+        self._table.setItem(row_idx, 9, QTableWidgetItem())
+
+        self._table.blockSignals(False)
+        self._frozen_col.add_row()
         self._refresh_table_height()
         self._recalculate()
 
-    def _delete_row_by_ref(self, eq: "_EquipmentRow"):
-        """Delete by object identity — never affected by index shifts."""
-        try:
-            idx = self._rows.index(eq)
-        except ValueError:
+    def _open_edit_dialog(self, row: int, _col: int = 0):
+        if self._frozen:
             return
-        self._rows.pop(idx)
-        self._table.removeRow(idx)
+        if not (0 <= row < self._table.rowCount()):
+            return
+        row_data = {
+            "name":   self._cell_text(row, 0),
+            "source": self._cell_text(row, 1, ENERGY_SOURCES[0]),
+            "rate":   self._cell_float(row, 2),
+            "hrs":    self._cell_float(row, 3),
+            "days":   self._cell_int(row, 4),
+            "ef":     self._cell_float(row, 5),
+        }
+        dlg = _EditRowDialog(row_data, parent=self)
+        if dlg.exec() == QDialog.Accepted:
+            v = dlg.get_values()
+            _L = Qt.AlignLeft | Qt.AlignVCenter
+            _R = Qt.AlignRight | Qt.AlignVCenter
+            self._table.blockSignals(True)
+            self._table.item(row, 0).setText(v["name"])
+            self._table.item(row, 1).setText(v["source"])
+            self._table.item(row, 2).setText(str(v["rate"]))
+            self._table.item(row, 3).setText(str(v["hrs"]))
+            self._table.item(row, 4).setText(str(v["days"]))
+            self._table.item(row, 5).setText(str(v["ef"]))
+            self._table.blockSignals(False)
+            self._recalculate()
+
+    def _delete_row(self, row_idx: int):
+        if not (0 <= row_idx < self._table.rowCount()):
+            return
+        self._table.removeRow(row_idx)
+        self._frozen_col.removeRow(row_idx)
         self._refresh_table_height()
         self._recalculate()
 
     def _load_defaults(self):
-        if self._rows:
+        if self._table.rowCount() > 0:
             reply = QMessageBox.question(
                 self,
                 "Load Defaults",
@@ -519,7 +679,7 @@ class _DetailedTable(QWidget):
             self._add_blank_row(d)
 
     def _clear_all(self, confirm=True):
-        if confirm and self._rows:
+        if confirm and self._table.rowCount() > 0:
             reply = QMessageBox.question(
                 self,
                 "Clear All",
@@ -529,21 +689,51 @@ class _DetailedTable(QWidget):
             if reply != QMessageBox.Yes:
                 return
         self._table.setRowCount(0)
-        self._rows.clear()
+        self._frozen_col.setRowCount(0)
         self._cached_total = 0.0
         self._refresh_table_height()
         self._recalculate()
 
     # ── Calculation ───────────────────────────────────────────────────────
 
+    def _on_cell_changed(self, row, col):
+        if col == 1:  # Energy Source changed — auto-update EF
+            src = self._cell_text(row, 1, ENERGY_SOURCES[0])
+            if src in EF_DEFAULTS:
+                self._table.blockSignals(True)
+                ef_item = self._table.item(row, 5)
+                if ef_item:
+                    ef_item.setText(str(EF_DEFAULTS[src]))
+                self._table.blockSignals(False)
+        self._recalculate()
+
     def _recalculate(self):
         diesel_total = elec_total = 0.0
-        for eq in self._rows:
-            em = eq.recalculate()
-            if eq.source.currentText() == "Diesel":
-                diesel_total += em
+        self._table.blockSignals(True)
+        for row in range(self._table.rowCount()):
+            rate = self._cell_float(row, 2)
+            hrs  = self._cell_float(row, 3)
+            days = self._cell_int(row, 4)
+            ef   = self._cell_float(row, 5)
+            src  = self._cell_text(row, 1, ENERGY_SOURCES[0])
+
+            consumption = rate * hrs * days
+            emissions   = consumption * ef
+            unit = CONSUMPTION_UNIT.get(src, "units")
+
+            c_item = self._table.item(row, 6)
+            e_item = self._table.item(row, 7)
+            if c_item:
+                c_item.setText(f"{fmt_comma(consumption)} {unit}")
+            if e_item:
+                e_item.setText(fmt_comma(emissions))
+
+            if src == "Diesel":
+                diesel_total += emissions
             else:
-                elec_total += em
+                elec_total += emissions
+        self._table.blockSignals(False)
+
         self._cached_total = diesel_total + elec_total
         self._lbl_diesel_sub.setText(f"Diesel: {fmt_comma(diesel_total)} kg CO₂e")
         self._lbl_elec_sub.setText(f"Electricity: {fmt_comma(elec_total)} kg CO₂e")
@@ -553,8 +743,14 @@ class _DetailedTable(QWidget):
     def freeze(self, frozen: bool = True):
         self._frozen = frozen
         freeze_widgets(frozen, self.btn_add, self.btn_defaults, self.btn_clear, self.btn_apply)
-        for row in self._rows:
-            row.freeze(frozen)
+        flags_editable = Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable
+        flags_frozen   = Qt.ItemIsEnabled | Qt.ItemIsSelectable
+        for row in range(self._table.rowCount()):
+            for col in range(6):  # cols 0–5 are user-editable
+                item = self._table.item(row, col)
+                if item:
+                    item.setFlags(flags_frozen if frozen else flags_editable)
+        self._action_delegate.set_frozen(frozen)
 
     def get_total(self) -> float:
         """Return last recalculated total — avoids redundant row traversal."""
@@ -563,9 +759,17 @@ class _DetailedTable(QWidget):
     # ── Data I/O ──────────────────────────────────────────────────────────
 
     def collect(self) -> dict:
-        return {
-            "rows": [eq.to_dict() for eq in self._rows],
-        }
+        rows = []
+        for row in range(self._table.rowCount()):
+            rows.append({
+                "name":   self._cell_text(row, 0),
+                "source": self._cell_text(row, 1, ENERGY_SOURCES[0]),
+                "rate":   self._cell_float(row, 2),
+                "hrs":    self._cell_float(row, 3),
+                "days":   self._cell_int(row, 4),
+                "ef":     self._cell_float(row, 5),
+            })
+        return {"rows": rows}
 
     def load(self, data: dict):
         self._clear_all(confirm=False)
