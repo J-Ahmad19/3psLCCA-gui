@@ -1,6 +1,5 @@
 import os
 from PySide6.QtWidgets import QApplication
-from gui.project_controller import ProjectController
 import core.start_manager as sm
 
 
@@ -14,6 +13,7 @@ class ProjectManager:
 
     def _create_window(self):
         from gui.project_window import ProjectWindow
+        from gui.project_controller import ProjectController
 
         new_controller = ProjectController()
         win = ProjectWindow(manager=self, controller=new_controller)

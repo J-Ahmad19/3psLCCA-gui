@@ -1,6 +1,6 @@
 import os
 
-from PySide6.QtCore import Qt, QRect, QSize, QEvent, QPoint
+from PySide6.QtCore import Qt, QRect, QSize, QEvent, QPoint, QTimer
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
@@ -34,23 +34,6 @@ from gui.theme import (
 )
 from gui.styles import font as _f
 from PySide6.QtWidgets import QToolTip
-
-from gui.components.save_status_bar import SaveStatusBar
-from gui.components.logs import Logs
-from gui.components.rollback_dialog import RollbackDialog
-from gui.components.blob_manager import BlobManagerDialog
-from gui.components.global_info.main import GeneralInfo
-from gui.components.bridge_data.main import BridgeData
-from gui.components.structure.main import StructureTabView
-from gui.components.traffic_data.main import TrafficData
-from gui.components.financial_data.main import FinancialData
-from gui.components.carbon_emission.main import CarbonEmissionTabView
-from gui.components.maintenance.main import Maintenance
-from gui.components.recycling.main import Recycling
-from gui.components.demolition.main import Demolition
-from gui.components.home_page import HomePage
-from gui.components.outputs.outputs_page import OutputsPage
-from gui.components.utils.validation_helpers import set_lock_tooltip_target
 
 
 # ── Sidebar tree definition ───────────────────────────────────────────────────
@@ -317,8 +300,9 @@ class ProjectWindow(QMainWindow):
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
 
+        self._project_ui_ready = False
         self._setup_home_ui()  # index 0
-        self._setup_project_ui()  # index 1
+        # _setup_project_ui() deferred to first show_project_view()
 
         # ── Controller signals ────────────────────────────────────────────
         self.controller.fault_occurred.connect(self._on_fault)
@@ -335,12 +319,17 @@ class ProjectWindow(QMainWindow):
     # ── Home screen ───────────────────────────────────────────────────────────
 
     def _setup_home_ui(self):
+        from gui.components.home_page import HomePage
         self.home_widget = HomePage(manager=self.manager)
         self.main_stack.addWidget(self.home_widget)  # index 0
 
     # ── Project view ──────────────────────────────────────────────────────────
 
     def _setup_project_ui(self):
+        from gui.components.save_status_bar import SaveStatusBar
+        from gui.components.logs import Logs
+        from gui.components.outputs.outputs_page import OutputsPage
+
         self.project_widget = QWidget()
         master_layout = QVBoxLayout(self.project_widget)
         master_layout.setContentsMargins(0, 0, 0, 0)
@@ -507,25 +496,15 @@ class ProjectWindow(QMainWindow):
         self.outputs_page.navigate_requested.connect(self._navigate_to_page)
         self.outputs_page.calculation_completed.connect(self._on_calculation_done)
 
-        self.widget_map = {
-            "General Information": GeneralInfo(controller=self.controller),
-            "Bridge Data": BridgeData(controller=self.controller),
-            "Construction Work Data": StructureTabView(controller=self.controller),
-            "Traffic Data": TrafficData(controller=self.controller),
-            "Financial Data": FinancialData(controller=self.controller),
-            "Carbon Emission Data": CarbonEmissionTabView(controller=self.controller),
-            "Maintenance and Repair": Maintenance(controller=self.controller),
-            "Recycling": Recycling(controller=self.controller),
-            "Demolition": Demolition(controller=self.controller),
-            "Outputs": self.outputs_page,
-        }
+        # Page widgets are built lazily on first sidebar click via _get_or_create_widget
+        self.widget_map = {"Outputs": self.outputs_page}
+        self._page_names = [
+            "General Information", "Bridge Data", "Construction Work Data",
+            "Traffic Data", "Financial Data", "Carbon Emission Data",
+            "Maintenance and Repair", "Recycling", "Demolition",
+        ]
 
-        self.outputs_page.register_pages(self.widget_map)
-        self.widget_map["Construction Work Data"].tab_changed.connect(self._sync_sidebar_from_tab)
-        self.widget_map["Carbon Emission Data"].tab_changed.connect(self._sync_sidebar_from_tab)
-
-        for widget in self.widget_map.values():
-            self.content_stack.addWidget(widget)
+        self.content_stack.addWidget(self.outputs_page)
         self.content_stack.addWidget(self.logs_page)
 
         self.log_action.triggered.connect(
@@ -543,28 +522,72 @@ class ProjectWindow(QMainWindow):
         master_layout.addWidget(self.splitter, stretch=1)
         self.main_stack.addWidget(self.project_widget)  # index 1
 
+    def _get_or_create_widget(self, name: str):
+        """Return the page widget for *name*, creating it on first access."""
+        if name in self.widget_map:
+            return self.widget_map[name]
+        if name not in self._page_names:
+            return None
+
+        if name == "General Information":
+            from gui.components.global_info.main import GeneralInfo
+            widget = GeneralInfo(controller=self.controller)
+        elif name == "Bridge Data":
+            from gui.components.bridge_data.main import BridgeData
+            widget = BridgeData(controller=self.controller)
+        elif name == "Construction Work Data":
+            from gui.components.structure.main import StructureTabView
+            widget = StructureTabView(controller=self.controller)
+        elif name == "Traffic Data":
+            from gui.components.traffic_data.main import TrafficData
+            widget = TrafficData(controller=self.controller)
+        elif name == "Financial Data":
+            from gui.components.financial_data.main import FinancialData
+            widget = FinancialData(controller=self.controller)
+        elif name == "Carbon Emission Data":
+            from gui.components.carbon_emission.main import CarbonEmissionTabView
+            widget = CarbonEmissionTabView(controller=self.controller)
+        elif name == "Maintenance and Repair":
+            from gui.components.maintenance.main import Maintenance
+            widget = Maintenance(controller=self.controller)
+        elif name == "Recycling":
+            from gui.components.recycling.main import Recycling
+            widget = Recycling(controller=self.controller)
+        elif name == "Demolition":
+            from gui.components.demolition.main import Demolition
+            widget = Demolition(controller=self.controller)
+        else:
+            return None
+
+        self.widget_map[name] = widget
+        self.content_stack.addWidget(widget)
+
+        if name == "Construction Work Data":
+            widget.tab_changed.connect(self._sync_sidebar_from_tab)
+        elif name == "Carbon Emission Data":
+            widget.tab_changed.connect(self._sync_sidebar_from_tab)
+
+        if self._frozen and hasattr(widget, "freeze"):
+            widget.freeze(True)
+
+        return widget
+
     def _select_sidebar(self, item: QTreeWidgetItem):
         header = item.text(0)
         parent = item.parent()
 
-        if header in self.widget_map:
-            self.content_stack.setCurrentWidget(self.widget_map[header])
+        # Direct page item — show it
+        widget = self._get_or_create_widget(header)
+        if widget:
+            self.content_stack.setCurrentWidget(widget)
             return
 
-        if parent is None:
-            return
-
-        parent_header = parent.text(0)
-
-        if parent_header == "Construction Work Data":
-            self.content_stack.setCurrentWidget(
-                self.widget_map["Construction Work Data"]
-            )
-            self.widget_map["Construction Work Data"].select_tab(header)
-
-        elif parent_header == "Carbon Emission Data":
-            self.content_stack.setCurrentWidget(self.widget_map["Carbon Emission Data"])
-            self.widget_map["Carbon Emission Data"].select_tab(header)
+        # Leaf item under a tabbed page — show parent page and select tab
+        if parent is not None:
+            w = self._get_or_create_widget(parent.text(0))
+            if w and hasattr(w, "select_tab"):
+                self.content_stack.setCurrentWidget(w)
+                w.select_tab(header)
 
     # ── View switching ────────────────────────────────────────────────────────
 
@@ -580,13 +603,39 @@ class ProjectWindow(QMainWindow):
     def show_project_view(self):
         if not self.has_project_loaded():
             return
+        if not self._project_ui_ready:
+            self._setup_project_ui()
+            self._project_ui_ready = True
         display = self.controller.active_display_name or self.project_id
         self.setWindowTitle(f"LCCA - {display}")
         self.main_stack.setCurrentWidget(self.project_widget)
-        self.content_stack.setCurrentWidget(self.widget_map["General Information"])
+        self.content_stack.setCurrentWidget(self._get_or_create_widget("General Information"))
         items = self.sidebar.findItems("General Information", Qt.MatchExactly)
         if items:
             self.sidebar.setCurrentItem(items[0])
+
+        # Silently preload remaining pages after GeneralInfo is rendered.
+        # Light pages first, heavy last. Each builds in its own event loop tick.
+        QTimer.singleShot(100, self._preload_next_widget)
+
+    def _preload_next_widget(self, _index: int = 0):
+        """Build one unbuilt page per call, scheduled via QTimer so the event
+        loop stays free between each. Silently skips already-built pages."""
+        # Heavy/tab-heavy pages first so sidebar leaf clicks are lag-free early
+        _preload_order = [
+            "Construction Work Data", "Carbon Emission Data",
+            "Bridge Data", "Traffic Data", "Financial Data",
+            "Maintenance and Repair", "Recycling", "Demolition",
+        ]
+        while _index < len(_preload_order):
+            name = _preload_order[_index]
+            _index += 1
+            if name not in self.widget_map:
+                self._get_or_create_widget(name)
+                # Schedule next one after yielding to event loop
+                QTimer.singleShot(50, lambda i=_index: self._preload_next_widget(i))
+                return
+        # All done — nothing to do
 
     def has_project_loaded(self):
         return self.project_id is not None
@@ -634,12 +683,17 @@ class ProjectWindow(QMainWindow):
             if checked else
             "Click to lock this project and prevent accidental edits."
         )
+        from gui.components.utils.validation_helpers import set_lock_tooltip_target
         set_lock_tooltip_target(self.btn_lock if checked else None)
         for page in self.widget_map.values():
             if hasattr(page, "freeze"):
                 page.freeze(checked)
 
     def _run_calculate(self):
+        # Ensure all pages exist — needed for full validation and calculation
+        for name in self._page_names:
+            self._get_or_create_widget(name)
+        self.outputs_page.register_pages(self.widget_map)
         self.outputs_page.run_validation()
         self.content_stack.setCurrentWidget(self.outputs_page)
         items = self.sidebar.findItems("Outputs", Qt.MatchExactly)
@@ -654,7 +708,7 @@ class ProjectWindow(QMainWindow):
 
     def _navigate_to_page(self, page_name: str):
         """Navigate sidebar + content stack to a named page."""
-        widget = self.widget_map.get(page_name)
+        widget = self._get_or_create_widget(page_name)
         if widget:
             self.content_stack.setCurrentWidget(widget)
         items = self.sidebar.findItems(page_name, Qt.MatchExactly | Qt.MatchRecursive)
@@ -791,12 +845,14 @@ class ProjectWindow(QMainWindow):
     def _open_rollback_dialog(self):
         if not self.controller.engine or not self.controller.engine.is_active():
             return
+        from gui.components.rollback_dialog import RollbackDialog
         dlg = RollbackDialog(self.controller, parent=self)
         dlg.exec()
 
     def _open_blob_manager(self):
         if not self.controller.engine or not self.controller.engine.is_active():
             return
+        from gui.components.blob_manager import BlobManagerDialog
         dlg = BlobManagerDialog(self.controller, parent=self)
         dlg.exec()
 

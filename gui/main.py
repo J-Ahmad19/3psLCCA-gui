@@ -1,8 +1,8 @@
 import sys
 import os
-from PySide6.QtWidgets import QApplication, QSpinBox, QDoubleSpinBox, QComboBox, QLineEdit, QProxyStyle, QStyle, QTableView
-from PySide6.QtCore import QObject, QEvent, Qt
-from PySide6.QtGui import QFocusEvent, QMouseEvent, QFontDatabase
+from PySide6.QtWidgets import QApplication, QSpinBox, QDoubleSpinBox, QComboBox, QLineEdit, QProxyStyle, QStyle, QTableView, QSplashScreen
+from PySide6.QtCore import QObject, QEvent, Qt, QTimer
+from PySide6.QtGui import QFocusEvent, QMouseEvent, QFontDatabase, QPixmap, QColor
 from gui.project_manager import ProjectManager
 from gui.palette_manager import dark, light
 from gui.theme import QSS_TOKENS, DARK_QSS_TOKENS
@@ -111,6 +111,18 @@ def main():
 
     app = QApplication(sys.argv)
 
+    # Show splash immediately so the user sees something while loading
+    _px = QPixmap(420, 140)
+    _px.fill(QColor("#1a1a2e"))
+    splash = QSplashScreen(_px)
+    splash.showMessage(
+        "Loading OS Bridge LCCA...",
+        Qt.AlignHCenter | Qt.AlignBottom,
+        QColor("#2ecc71"),
+    )
+    splash.show()
+    app.processEvents()
+
     # Load bundled Ubuntu font family
     _font_dir = os.path.join("gui", "assets", "themes", "Ubuntu_font")
     for _ttf in [
@@ -121,12 +133,14 @@ def main():
     ]:
         QFontDatabase.addApplicationFont(os.path.join(_font_dir, _ttf))
 
-    # Load user-defined custom units from DB into the global cache
-    try:
-        from gui.components.utils.unit_resolver import load_custom_units
-        load_custom_units()
-    except Exception as _e:
-        print(f"Warning: Could not load custom units: {_e}")
+    # Load user-defined custom units after event loop starts (non-blocking)
+    def _load_custom_units():
+        try:
+            from gui.components.utils.unit_resolver import load_custom_units
+            load_custom_units()
+        except Exception as _e:
+            print(f"Warning: Could not load custom units: {_e}")
+    QTimer.singleShot(0, _load_custom_units)
 
     wheel_filter = DisableSpinBoxScroll()
     app.installEventFilter(wheel_filter)
@@ -162,6 +176,7 @@ def main():
             sm.set_name("")  # mark as seen so dialog won't repeat
 
     manager = ProjectManager()
+    splash.close()
     manager.open_project()
 
     sys.exit(app.exec())

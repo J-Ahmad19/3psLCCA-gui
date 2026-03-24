@@ -19,6 +19,7 @@ class ProjectController(QObject):
         self.engine = None
         self.active_project_id = None
         self.active_display_name = None
+        self._chunk_cache: dict = {}  # chunk_name → data, cleared on close/restore/rollback
 
     # --------------------------------------------------------------------------
     # PROJECT LIFECYCLE
@@ -74,6 +75,7 @@ class ProjectController(QObject):
                 self.engine = None
                 self.active_project_id = None
                 self.active_display_name = None
+                self._chunk_cache.clear()
                 self.dirty_changed.emit(False)
 
     # --------------------------------------------------------------------------
@@ -83,14 +85,17 @@ class ProjectController(QObject):
     def save_chunk_data(self, chunk_name: str, data: dict):
         """Passes data to the engine's staging area (debounced write)."""
         if self.engine and self.engine.is_active():
+            self._chunk_cache[chunk_name] = data
             self.engine.stage_update(data, chunk_name)
             self.chunk_updated.emit(chunk_name)
 
     def get_chunk(self, chunk_name: str) -> dict:
-        """Returns chunk data for a widget."""
-        if self.engine and self.engine.is_active():
-            return self.engine.fetch_chunk(chunk_name)
-        return {}
+        """Returns chunk data — from cache if available, otherwise reads engine."""
+        if not self.engine or not self.engine.is_active():
+            return {}
+        if chunk_name not in self._chunk_cache:
+            self._chunk_cache[chunk_name] = self.engine.fetch_chunk(chunk_name)
+        return self._chunk_cache[chunk_name]
 
     def is_dirty(self) -> bool:
         return self.engine.is_dirty() if self.engine else False
@@ -111,6 +116,7 @@ class ProjectController(QObject):
             self.engine.force_sync()
             success = self.engine.restore_checkpoint(zip_name)
             if success:
+                self._chunk_cache.clear()
                 self.sync_completed.emit()
                 self.project_loaded.emit()
             return success
@@ -142,7 +148,10 @@ class ProjectController(QObject):
     def rollback_chunk(self, chunk_name: str, source_path: str) -> bool:
         """Rolls back a chunk to a specific copy."""
         if self.engine and self.engine.is_active():
-            return self.engine.rollback_chunk(chunk_name, source_path)
+            success = self.engine.rollback_chunk(chunk_name, source_path)
+            if success:
+                self._chunk_cache.pop(chunk_name, None)
+            return success
         return False
 
     # --------------------------------------------------------------------------

@@ -498,9 +498,12 @@ class SocialCost(ScrollableForm):
             return
         if not self.controller.engine.is_active() or not self.chunk_name:
             return
-        data = self.controller.engine.fetch_chunk(self.chunk_name)
-        if data:
-            self.load_data_dict(data)
+        data = self.controller.get_chunk(self.chunk_name)
+        if not data or data == self._loaded_data:
+            self._sync_with_global_settings()
+            return
+        self._loaded_data = data
+        self.load_data_dict(data)
         self._sync_with_global_settings()
 
     def load_data_dict(self, data):

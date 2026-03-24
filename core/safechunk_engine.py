@@ -127,6 +127,7 @@ class SafeChunkEngine:
         force_save_delay: float = 2.0,
         base_dir: str = "user_projects",
         readable: bool = False,
+        optimize: bool = True,
     ):
         # ── Identity ──────────────────────────────────────────────────────────
         self.project_id = project_id
@@ -136,6 +137,14 @@ class SafeChunkEngine:
         self.force_save_delay = force_save_delay
         self.base_dir_path = Path(base_dir).resolve()
         self.readable = readable
+
+        # ── Optimize mode ─────────────────────────────────────────────────────
+        # When True (default):
+        #   - WAL fsync is skipped (flush only) — reduces per-write disk stall
+        #   - Integrity check is skipped on clean close — faster attach
+        #   - WAL removes are batched per commit — fewer file rewrites
+        # When False: original safe behaviour, every fsync is honoured.
+        self.optimize = optimize
 
         # ── Paths ─────────────────────────────────────────────────────────────
         self.project_path = self.base_dir_path / self.project_id
@@ -365,13 +374,24 @@ class SafeChunkEngine:
             if replayed:
                 self._session_dirty = True
 
-            # ── Integrity check (always — especially critical after a crash) ────
+            # ── Integrity check ───────────────────────────────────────────────
+            # optimize=True : skipped if last close was clean (no crash).
+            #                 The WAL would have replayed any uncommitted writes,
+            #                 so a full hash pass is redundant after a clean close.
+            # optimize=False: always runs, original behaviour.
             last_clean = existing_version.get("clean_close", True)
             if not last_clean:
                 self._log(
                     "Last session was unclean — running integrity check after WAL replay."
                 )
-            damaged = self._verify_chunks()
+            skip_check = self.optimize and last_clean and not replayed
+            if skip_check:
+                self._log(
+                    "Optimize: clean close detected — skipping full integrity check."
+                )
+                damaged = []
+            else:
+                damaged = self._verify_chunks()
             if damaged:
                 self._log(
                     f"Integrity: {len(damaged)} chunk(s) failed hash check "
@@ -392,7 +412,9 @@ class SafeChunkEngine:
                         try:
                             lcca_path = self.chunks_path / f"{name}{LCCA_EXT}"
                             lcca_path.write_bytes(_encode({}, self.readable))
-                            self._log(f"Wrote empty placeholder for lost chunk '{name}'.")
+                            self._log(
+                                f"Wrote empty placeholder for lost chunk '{name}'."
+                            )
                         except Exception as _e:
                             self._log(f"Could not write placeholder for '{name}': {_e}")
                         _c.pop(name, None)
@@ -405,7 +427,16 @@ class SafeChunkEngine:
                     )
 
             # ── Blob integrity check ───────────────────────────────────────────
-            damaged_blobs = self._verify_blobs()
+            # optimize=True : skipped if last close was clean, same rationale
+            #                 as the chunk integrity check above.
+            # optimize=False: always runs.
+            if skip_check:
+                self._log(
+                    "Optimize: clean close detected — skipping blob integrity check."
+                )
+                damaged_blobs = []
+            else:
+                damaged_blobs = self._verify_blobs()
             if damaged_blobs:
                 # Remove damaged blobs from manifest immediately so the same
                 # error does not re-fire on every subsequent open.
@@ -428,6 +459,7 @@ class SafeChunkEngine:
                 f"'{self.display_name}' ({self.project_id})."
                 + (f" WAL replayed {replayed} entries." if replayed else "")
                 + (" [readable mode]" if self.readable else "")
+                + (" [optimize=True]" if self.optimize else " [optimize=False]")
             )
 
         except Exception as e:
@@ -646,7 +678,12 @@ class SafeChunkEngine:
     # --------------------------------------------------------------------------
 
     def _wal_append(self, chunk_name: str, data: dict):
-        """Synchronously appends a WAL entry before any disk write."""
+        """Synchronously appends a WAL entry before any disk write.
+
+        optimize=True  — flush only (no fsync). Faster; tiny crash window
+                         between flush and the OS writing through to disk.
+        optimize=False — full fsync, original safe behaviour.
+        """
         try:
             entry = json.dumps(
                 {"chunk": chunk_name, "ts": time.time(), "data": data},
@@ -657,14 +694,25 @@ class SafeChunkEngine:
             with open(self.wal_path, "a", encoding="utf-8") as f:
                 f.write(record)
                 f.flush()
-                os.fsync(f.fileno())
+                if not self.optimize:
+                    os.fsync(f.fileno())
         except Exception as e:
             self._log(f"WAL append failed: {e}")
 
     def _wal_remove(self, chunk_name: str):
-        """Removes committed entries for a chunk from WAL."""
+        """Removes committed entries for a single chunk. Thin wrapper over _wal_remove_batch."""
+        self._wal_remove_batch([chunk_name])
+
+    def _wal_remove_batch(self, chunk_names: list):
+        """Removes committed entries for multiple chunks in a single WAL rewrite.
+
+        optimize=True  — called once after all chunks in a commit are written,
+                         avoiding O(n) rewrites per chunk.
+        optimize=False — behaviour is identical; batching is always safe.
+        """
         if not self.wal_path.exists():
             return
+        names = set(chunk_names)
         try:
             lines = self.wal_path.read_text(encoding="utf-8").splitlines()
             remaining = []
@@ -672,7 +720,7 @@ class SafeChunkEngine:
                 try:
                     rec = json.loads(line)
                     entry = json.loads(rec["e"])
-                    if entry.get("chunk") != chunk_name:
+                    if entry.get("chunk") not in names:
                         remaining.append(line)
                 except Exception:
                     remaining.append(line)
@@ -738,7 +786,9 @@ class SafeChunkEngine:
         Appends to WAL immediately for crash protection.
         """
         if not self._safe_name(chunk_name):
-            self._log(f"WARNING: stage_update rejected unsafe chunk_name: {chunk_name!r}")
+            self._log(
+                f"WARNING: stage_update rejected unsafe chunk_name: {chunk_name!r}"
+            )
             return
 
         with self._write_lock:
@@ -774,7 +824,9 @@ class SafeChunkEngine:
         Priority: staged memory → .lcca → .lcca.bak → .lcca.ebak → {}
         """
         if not self._safe_name(chunk_name):
-            self._log(f"WARNING: fetch_chunk rejected unsafe chunk_name: {chunk_name!r}")
+            self._log(
+                f"WARNING: fetch_chunk rejected unsafe chunk_name: {chunk_name!r}"
+            )
             return {}
         with self._write_lock:
             if chunk_name in self._staged_data:
@@ -840,20 +892,34 @@ class SafeChunkEngine:
     # --------------------------------------------------------------------------
 
     def _commit_to_disk(self):
-        """Writes all staged chunks to disk atomically with rotation."""
+        """Writes all staged chunks to disk atomically with rotation.
+
+        optimize=True  — collects all successfully written chunk names and
+                         removes them from the WAL in a single rewrite pass.
+        optimize=False — removes each chunk from WAL individually after write
+                         (original behaviour, one rewrite per chunk).
+        """
         with self._write_lock:
             if not self._staged_data or not self._engine_active:
                 return
 
             failed = []
+            committed = []
             for chunk_name, data in list(self._staged_data.items()):
                 try:
                     self._write_chunk(chunk_name, data)
                     del self._staged_data[chunk_name]
-                    self._wal_remove(chunk_name)
+                    if self.optimize:
+                        committed.append(chunk_name)  # batch for single WAL rewrite
+                    else:
+                        self._wal_remove(chunk_name)  # original: one rewrite per chunk
                 except Exception as e:
                     failed.append(chunk_name)
                     self._log(f"Commit failed for {chunk_name}: {e}")
+
+            # Batched WAL remove — single file rewrite for all committed chunks
+            if self.optimize and committed:
+                self._wal_remove_batch(committed)
 
             self._debounce_timer = None
             self._session_dirty = True
@@ -1159,9 +1225,7 @@ class SafeChunkEngine:
                 for member in zf.infolist():
                     target = (staging / member.filename).resolve()
                     if not str(target).startswith(str(staging_resolved)):
-                        raise ValueError(
-                            f"Unsafe path in archive: '{member.filename}'"
-                        )
+                        raise ValueError(f"Unsafe path in archive: '{member.filename}'")
                     zf.extract(member, staging)
 
             if (staging / "chunks").exists():
@@ -1310,10 +1374,7 @@ class SafeChunkEngine:
 
     def list_chunks(self) -> list[str]:
         """Returns names of all stored chunks."""
-        return [
-            f.name[: -len(LCCA_EXT)]
-            for f in self.chunks_path.glob(f"*{LCCA_EXT}")
-        ]
+        return [f.name[: -len(LCCA_EXT)] for f in self.chunks_path.glob(f"*{LCCA_EXT}")]
 
     def get_rollback_options(self, chunk_name: str) -> list[dict]:
         """
@@ -1414,8 +1475,7 @@ class SafeChunkEngine:
 
         # Prune entries for blobs no longer on disk.
         existing = {
-            f.name[: -len(BLOB_EXT)]
-            for f in self.blobs_path.glob(f"*{BLOB_EXT}")
+            f.name[: -len(BLOB_EXT)] for f in self.blobs_path.glob(f"*{BLOB_EXT}")
         }
         for stale in [k for k in list(blobs) if k not in existing]:
             del blobs[stale]
@@ -1909,6 +1969,7 @@ class SafeChunkEngine:
             "version": self.VERSION,
             "app_version": self.app_version,
             "readable_mode": self.readable,
+            "optimize": self.optimize,
             "chunk_count": len(list(self.chunks_path.glob(f"*{LCCA_EXT}"))),
             "checkpoint_count": (
                 len(list(self.checkpoint_manual.glob("cp_*.3psLCCA")))

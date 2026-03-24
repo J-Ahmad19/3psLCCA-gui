@@ -385,7 +385,12 @@ class OutputsPage(ScrollableForm):
 
         #--------------Prepare-General-Parameters-Start-------------------------------------------------
         _financial_data = data.get("financial_data")
-        
+        if _financial_data is None:
+            raise ValueError(
+                "Financial Data is missing from the calculation inputs.\n"
+                "Please fill in the Financial Data page and try again."
+            )
+
         analysis_period_years             = int(_financial_data.get("analysis_period"))
         discount_rate_percent             = float(_financial_data.get("discount_rate"))
         inflation_rate_percent            = float(_financial_data.get("inflation_rate"))

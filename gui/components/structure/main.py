@@ -20,10 +20,19 @@ from .widgets.misc_widget import MiscWidget
 from .widgets.trash_tab import TrashTabWidget
 
 
+_PAGES = [
+    ("Foundation", "str_foundation"),
+    ("Sub Structure", "str_sub_structure"),
+    ("Super Structure", "str_super_structure"),
+    ("Miscellaneous", "str_misc"),
+]
+
+
 class _ExcelParseWorker(QThread):
     """Runs parse_excel + verify_schema off the main thread."""
-    finished = Signal(dict)   # emits verified parsed data
-    error    = Signal(str)    # emits error message string
+
+    finished = Signal(dict)  # emits verified parsed data
+    error = Signal(str)  # emits error message string
 
     def __init__(self, path: str, parent=None):
         super().__init__(parent)
@@ -48,6 +57,9 @@ class StructureTabView(QWidget):
         super().__init__()
         self.setObjectName("StructureTabView")  # For identification in Manager
         self.controller = controller
+        self._loaded = False
+        if controller and hasattr(controller, "project_loaded"):
+            controller.project_loaded.connect(self._on_project_reloaded)
 
         self.main_layout = QVBoxLayout(self)
 
@@ -132,7 +144,15 @@ class StructureTabView(QWidget):
     def showEvent(self, event):
         """Qt event triggered when the widget is shown."""
         super().showEvent(event)
-        self.on_refresh()
+        if not self._loaded:
+            self.on_refresh()
+            self._loaded = True
+
+    def _on_project_reloaded(self):
+        self._loaded = False
+        if self.isVisible():
+            self.on_refresh()
+            self._loaded = True
 
     def toggle_trash_view(self):
         """Swaps between normal tabs and the Trash list."""
@@ -199,13 +219,15 @@ class StructureTabView(QWidget):
 
         # Warn about sheets routed to Misc
         fallback_sheets = [
-            s for s, rows in parsed.items()
+            s
+            for s, rows in parsed.items()
             if rows and rows[0].get("_is_fallback_chunk")
         ]
         if fallback_sheets:
             names = ", ".join(f'"{s}"' for s in fallback_sheets)
             QMessageBox.information(
-                self, "Unrecognised Sheet(s)",
+                self,
+                "Unrecognised Sheet(s)",
                 f"The following sheet(s) didn't match a known structural category "
                 f"and will be imported into <b>Misc</b> as new components:<br><br>{names}",
             )
@@ -219,7 +241,9 @@ class StructureTabView(QWidget):
         self.excel_btn.setEnabled(True)
         self.excel_btn.setText("Upload Excel")
         if msg == "empty":
-            QMessageBox.warning(self, "Empty File", "No data found in the selected file.")
+            QMessageBox.warning(
+                self, "Empty File", "No data found in the selected file."
+            )
         else:
             QMessageBox.critical(self, "Parse Error", msg)
 
@@ -246,13 +270,6 @@ class StructureTabView(QWidget):
         if not self.controller or not self.controller.engine:
             return {"errors": [], "warnings": []}
 
-        _PAGES = [
-            ("Foundation",      "str_foundation"),
-            ("Sub Structure",   "str_sub_structure"),
-            ("Super Structure", "str_super_structure"),
-            ("Miscellaneous",   "str_misc"),
-        ]
-
         page_totals: dict[str, float] = {}
         grand_total = 0.0
         trash_count = 0
@@ -268,8 +285,8 @@ class StructureTabView(QWidget):
                         trash_count += 1
                         continue
                     v = item.get("values", {})
-                    qty  = float(v.get("quantity", 0) or 0)
-                    rate = float(v.get("rate",     0) or 0)
+                    qty = float(v.get("quantity", 0) or 0)
+                    rate = float(v.get("rate", 0) or 0)
                     comp_total += qty * rate
                 page_total += comp_total
 
@@ -279,9 +296,7 @@ class StructureTabView(QWidget):
         warnings = []
 
         if grand_total == 0.0:
-            breakdown = "  |  ".join(
-                f"{name}: ₹0" for name, _ in _PAGES
-            )
+            breakdown = "  |  ".join(f"{name}: ₹0" for name, _ in _PAGES)
             warnings.append(
                 f"Total construction cost is ₹0 — no materials have been entered "
                 f"or all are in Trash. ({breakdown})"
@@ -311,12 +326,6 @@ class StructureTabView(QWidget):
         Returns a single dict with raw items per tab, component-wise totals,
         page-wise totals, and the overall grand total.
         """
-        _PAGES = [
-            ("Foundation",      "str_foundation"),
-            ("Sub Structure",   "str_sub_structure"),
-            ("Super Structure", "str_super_structure"),
-            ("Miscellaneous",   "str_misc"),
-        ]
 
         pages_data = {}
         grand_total = 0.0
@@ -334,8 +343,8 @@ class StructureTabView(QWidget):
                         if item.get("state", {}).get("in_trash", False):
                             continue
                         v = item.get("values", {})
-                        qty  = float(v.get("quantity", 0) or 0)
-                        rate = float(v.get("rate",     0) or 0)
+                        qty = float(v.get("quantity", 0) or 0)
+                        rate = float(v.get("rate", 0) or 0)
                         item_total = qty * rate
                         comp_total += item_total
                         active_items.append({**item, "total": item_total})
@@ -375,4 +384,3 @@ class StructureTabView(QWidget):
         if idx is not None:
             self.content_stack.setCurrentIndex(0)
             self.tab_view.setCurrentIndex(idx)
-            self.on_refresh()

@@ -831,7 +831,7 @@ class MachineryEmissions(ScrollableForm):
             ),
             "detailed": self._detailed_table.collect(),
             "lumpsum": lumpsum,
-            "remarks": self._remarks.to_html(),
+            "remarks": self._remarks.to_html() if hasattr(self, "_remarks") else "",
             "total_kgCO2e": round(
                 (
                     self._detailed_table.get_total()
@@ -897,15 +897,17 @@ class MachineryEmissions(ScrollableForm):
             return
         if not self.controller.engine.is_active() or not self.chunk_name:
             return
-        data = self.controller.engine.fetch_chunk(self.chunk_name)
-        if data:
-            self.load_data(data)
+        data = self.controller.get_chunk(self.chunk_name)
+        if not data or data == self._loaded_data:
+            return
+        self._loaded_data = data
+        self.load_data(data)
         self._apply_currency()
 
     def on_refresh(self):
         if not self.controller or not getattr(self.controller, "engine", None):
             return
-        data = self.controller.engine.fetch_chunk(CHUNK) or {}
+        data = self.controller.get_chunk(CHUNK) or {}
         self.load_data(data)
         self._apply_currency()
 

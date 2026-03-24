@@ -39,6 +39,7 @@ class BaseDataWidget(QWidget):
         self.chunk_name = chunk_name
         self._field_map = {}  # key -> widget
         self._loading = False
+        self._loaded_data: dict = {}  # last data loaded into widgets
 
         # UI Layout setup.
         # NOTE: self.form is intentionally NOT created here.
@@ -50,9 +51,9 @@ class BaseDataWidget(QWidget):
         self.form = None  # set by subclass
 
         if self.controller:
-            # 1. Connect for future project opens
+            # 1. Connect for future project opens — reset loaded state so fresh data is pulled
             if hasattr(self.controller, "project_loaded"):
-                self.controller.project_loaded.connect(self.refresh_from_engine)
+                self.controller.project_loaded.connect(self._on_project_reloaded)
 
             # 2. THE FIX: Immediate check for already active projects.
             # This handles widgets inside tabs that are created after the project is loaded.
@@ -112,20 +113,23 @@ class BaseDataWidget(QWidget):
         return widget
 
     def refresh_from_engine(self):
-        """Loads stored data from the engine into all registered widgets."""
+        """Loads stored data from the engine into widgets — skips if data unchanged."""
         if not self.controller or not self.controller.engine:
             return
-
-        # Verify engine is active and chunk name is set
         if not self.controller.engine.is_active() or not self.chunk_name:
             return
 
-        # Fetch the data chunk.
-        # (Assuming the method in SafeChunkEngine is named fetch_chunk or read_chunk)
-        data = self.controller.engine.fetch_chunk(self.chunk_name)
+        data = self.controller.get_chunk(self.chunk_name)
+        if not data or data == self._loaded_data:
+            return
 
-        if data:
-            self.load_data_dict(data)
+        self._loaded_data = data
+        self.load_data_dict(data)
+
+    def _on_project_reloaded(self):
+        """Reset loaded state on project reload so fresh data is pulled."""
+        self._loaded_data = {}
+        self.refresh_from_engine()
 
     def get_data_dict(self) -> dict:
         """Extracts current widget values into a plain dict for saving."""
@@ -187,7 +191,9 @@ class BaseDataWidget(QWidget):
             return
         self.data_changed.emit()
         if self.controller and self.chunk_name:
-            self.controller.save_chunk_data(self.chunk_name, self.get_data_dict())
+            data = self.get_data_dict()
+            self._loaded_data = data
+            self.controller.save_chunk_data(self.chunk_name, data)
 
     @staticmethod
     def _apply_value(widget: QWidget, val):

@@ -475,9 +475,12 @@ class TrafficEmissions(ScrollableForm):
             return
         if not self.controller.engine.is_active() or not self.chunk_name:
             return
-        data = self.controller.engine.fetch_chunk(self.chunk_name)
-        if data:
-            self._load_own_data(data)
+        data = self.controller.get_chunk(self.chunk_name)
+        if not data or data == self._loaded_data:
+            self._load_traffic_context()
+            return
+        self._loaded_data = data
+        self._load_own_data(data)
         self._load_traffic_context()
 
     # ── Data Loading ──────────────────────────────────────────────────────────

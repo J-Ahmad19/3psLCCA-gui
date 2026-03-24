@@ -392,6 +392,9 @@ class TransportEmissions(QWidget):
 
         self._details_visible = False
         self._frozen = False
+        self._loaded = False
+        if controller and hasattr(controller, "project_loaded"):
+            controller.project_loaded.connect(self._on_project_reloaded)
 
         outer = QVBoxLayout(self)
         outer.setSpacing(8)
@@ -738,4 +741,12 @@ class TransportEmissions(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
-        self.on_refresh()
+        if not self._loaded:
+            self.on_refresh()
+            self._loaded = True
+
+    def _on_project_reloaded(self):
+        self._loaded = False
+        if self.isVisible():
+            self.on_refresh()
+            self._loaded = True
