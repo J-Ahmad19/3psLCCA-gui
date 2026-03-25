@@ -128,37 +128,18 @@ def _relative_time(dt_str: str) -> str:
 
 
 from datetime import datetime
-import getpass
 
 def _greeting() -> str:
-    """
-    Returns a time-based greeting using system time
-    and automatically picks up the system username.
-    """
-
-    now = datetime.now()
-    hour = now.hour
-
-    # Time buckets
+    """Returns a time-based greeting string (no name)."""
+    hour = datetime.now().hour
     if 5 <= hour < 12:
-        greeting = "Good Morning"
+        return "Good Morning"
     elif 12 <= hour < 17:
-        greeting = "Good Afternoon"
+        return "Good Afternoon"
     elif 17 <= hour < 21:
-        greeting = "Good Evening"
+        return "Good Evening"
     else:
-        greeting = "Good Night"
-
-    # Get system username (fallback to 'User')
-    try:
-        username = getpass.getuser()
-    except Exception:
-        username = "User"
-
-    # Clean formatting
-    username = username.strip().title() if username else "User"
-
-    return f"{greeting} {username}!"
+        return "Good Night"
 
 
 STATUS_CONFIG = {

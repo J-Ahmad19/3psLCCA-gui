@@ -1,0 +1,31 @@
+# gui/themes/light/default.yml — Default light theme (Bootstrap 5 tokens).
+name: Default Light
+
+palette:
+  accent:           "#0d6efd"
+  window:           "#f8f9fa"   # BODY_BG
+  alternate_base:   "#ffffff"   # WHITE
+  base:             "#ffffff"
+  button:           "#ffffff"
+  mid:              "#e9ecef"   # BORDER_SUBTLE
+  light:            "#dee2e6"   # BORDER
+  highlight:        "#0d6efd"   # PRIMARY
+  highlighted_text: "#000000"
+  text:             "#212529"   # BODY_COLOR
+  window_text:      "#212529"
+  button_text:      "#212529"
+  placeholder_text: "#6c757d"   # SECONDARY
+
+qss_tokens:
+  "$primary-hover":  "#0b5ed7"
+  "$primary-active": "#0a58ca"
+  "$border-subtle":  "#e9ecef"
+  "$surface-active": "#e2e6ea"
+  "$body-color":     "#212529"
+  "$secondary":      "#6c757d"
+  "$primary":        "#0d6efd"
+  "$body-bg":        "#f8f9fa"
+  "$border":         "#dee2e6"
+  "$surface":        "#e9ecef"
+  "$muted":          "#6c757d"
+  "$white":          "#ffffff"

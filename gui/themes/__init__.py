@@ -5,24 +5,27 @@ Directory layout
 ----------------
 gui/themes/
     light/
-        default.py      Bootstrap light  (built-in)
-        soft_light.py   Catppuccin Latte (built-in)
-        <custom>.py     drop any .py here to add your own light theme
+        default.yml     Bootstrap light  (built-in)
+        soft_light.yml  Catppuccin Latte (built-in)
+        <custom>.yml    drop any .yml here to add your own light theme
+        <custom>.py     legacy .py themes still work as a fallback
     dark/
-        default.py      Default dark     (built-in)
-        dracula.py      Dracula          (built-in)
-        <custom>.py     drop any .py here to add your own dark theme
+        default.yml     Default dark     (built-in)
+        dracula.yml     Dracula          (built-in)
+        <custom>.yml    drop any .yml here to add your own dark theme
+        <custom>.py     legacy .py themes still work as a fallback
 
-Each theme module must export three names:
-    NAME: str                   — human-readable display name
-    palette: QPalette           — the Qt colour palette
-    QSS_TOKENS: dict[str, str]  — token → hex map for main.qss substitution
+Each theme YAML must contain:
+    name: str                        — human-readable display name
+    palette: map[role, hex]          — QPalette role → hex colour
+    qss_tokens: map[token, hex]      — token → hex map for main.qss substitution
 
 Selecting active themes
 -----------------------
 Change via the Settings panel in the app sidebar (persisted to user prefs).
 Fallback defaults are ACTIVE_LIGHT / ACTIVE_DARK below.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -30,22 +33,45 @@ import os
 import pkgutil
 from pathlib import Path
 
-from PySide6.QtGui import QPalette
+import yaml
+from PySide6.QtGui import QPalette, QColor
 
 # ── Fallback defaults (used if no user pref is saved) ────────────────────
-ACTIVE_LIGHT:    str = "soft_light"  # built-in: "default" | "soft_light"
-ACTIVE_DARK:     str = "dracula"     # built-in: "default" | "dracula"
-APPEARANCE_MODE: str = "auto"        # "auto" | "light" | "dark"
+ACTIVE_LIGHT: str = "soft_light"  # built-in: "default" | "soft_light"
+ACTIVE_DARK: str = "dracula"  # built-in: "default" | "dracula"
+APPEARANCE_MODE: str = "auto"  # "auto" | "light" | "dark"
 # ──────────────────────────────────────────────────────────────────────────
 
 _PKG = "gui.themes"
+_THEMES_DIR = Path(__file__).parent
 # Absolute path — works regardless of working directory (e.g. when a project is open)
 _QSS_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "gui", "assets", "themes", "main.qss",
+    "gui",
+    "assets",
+    "themes",
+    "main.qss",
 )
 _prefs_loaded = False
-_current_is_dark: bool = False   # last-known resolved is_dark; set by track_mode()
+_current_is_dark: bool = False  # last-known resolved is_dark; set by track_mode()
+
+# ── QPalette role name → attribute map ───────────────────────────────────
+_PALETTE_ROLES: dict[str, QPalette.ColorRole] = {
+    "accent": QPalette.Accent,
+    "window": QPalette.Window,
+    "alternate_base": QPalette.AlternateBase,
+    "base": QPalette.Base,
+    "button": QPalette.Button,
+    "mid": QPalette.Mid,
+    "midlight": QPalette.Midlight,
+    "light": QPalette.Light,
+    "highlight": QPalette.Highlight,
+    "highlighted_text": QPalette.HighlightedText,
+    "text": QPalette.Text,
+    "window_text": QPalette.WindowText,
+    "button_text": QPalette.ButtonText,
+    "placeholder_text": QPalette.PlaceholderText,
+}
 
 
 def _ensure_prefs() -> None:
@@ -56,6 +82,7 @@ def _ensure_prefs() -> None:
     _prefs_loaded = True
     try:
         import core.start_manager as sm
+
         v = sm.get_pref("active_light_theme")
         if v:
             ACTIVE_LIGHT = v
@@ -69,8 +96,33 @@ def _ensure_prefs() -> None:
         pass
 
 
+def _load_yaml_theme(path: Path) -> tuple[QPalette, dict[str, str]]:
+    """Parse a .yml theme file and return (QPalette, QSS_TOKENS)."""
+    with open(path) as f:
+        data = yaml.safe_load(f)
+
+    palette = QPalette()
+    for role_name, hex_color in data.get("palette", {}).items():
+        role = _PALETTE_ROLES.get(role_name)
+        if role is not None:
+            palette.setColor(role, QColor(hex_color))
+
+    qss_tokens: dict[str, str] = data.get("qss_tokens", {})
+    return palette, qss_tokens
+
+
 def _load(variant: str, name: str) -> tuple[QPalette, dict[str, str]]:
-    """Import gui.themes.<variant>.<name> and return (palette, QSS_TOKENS)."""
+    """Load a theme by variant ('light'|'dark') and name.
+
+    Resolution order:
+      1. <themes_dir>/<variant>/<name>.yml  — preferred declarative format
+      2. gui.themes.<variant>.<name>        — legacy .py module fallback
+    """
+    yml_path = _THEMES_DIR / variant / f"{name}.yml"
+    if yml_path.exists():
+        return _load_yaml_theme(yml_path)
+
+    # Legacy .py fallback — keeps any existing custom themes working
     mod = importlib.import_module(f"{_PKG}.{variant}.{name}")
     return mod.palette, mod.QSS_TOKENS
 
@@ -96,6 +148,7 @@ def set_active_theme(variant: str, name: str) -> None:
         ACTIVE_DARK = name
     try:
         import core.start_manager as sm
+
         sm.set_pref(f"active_{variant}_theme", name)
     except Exception:
         pass
@@ -109,6 +162,7 @@ def set_appearance_mode(mode: str) -> None:
     APPEARANCE_MODE = mode
     try:
         import core.start_manager as sm
+
         sm.set_pref("appearance_mode", mode)
     except Exception:
         pass
@@ -134,13 +188,14 @@ def track_mode(is_dark: bool) -> None:
 def reapply(app=None) -> None:
     """Re-apply the current active themes to the running QApplication."""
     from PySide6.QtWidgets import QApplication
+
     if app is None:
         app = QApplication.instance()
     if app is None:
         return
     # Use tracked state — don't read palette (it already reflects the last theme)
     is_dark = resolve_is_dark(_current_is_dark)
-    track_mode(is_dark)   # keep state current for the next call
+    track_mode(is_dark)  # keep state current for the next call
     palette, tokens = get_dark_theme() if is_dark else get_light_theme()
 
     app.setPalette(palette)
@@ -168,17 +223,25 @@ def reapply(app=None) -> None:
 
 
 def list_themes(variant: str) -> list[str]:
-    """Return module names of all available themes for 'light' or 'dark'.
-    Any .py dropped into the variant folder is automatically discovered."""
-    pkg_dir = Path(__file__).parent / variant
-    return sorted(
-        name
-        for _, name, is_pkg in pkgutil.iter_modules([str(pkg_dir)])
-        if not is_pkg
-    )
+    """Return names of all available themes for 'light' or 'dark'.
+    Discovers both .yml files and legacy .py modules in the variant folder."""
+    pkg_dir = _THEMES_DIR / variant
+
+    yml_names = {p.stem for p in pkg_dir.glob("*.yml")}
+    py_names = {
+        name for _, name, is_pkg in pkgutil.iter_modules([str(pkg_dir)]) if not is_pkg
+    }
+    return sorted(yml_names | py_names)
 
 
 def get_theme_name(variant: str, module_name: str) -> str:
-    """Return the human-readable NAME from a theme module."""
+    """Return the human-readable name for a theme."""
+    yml_path = _THEMES_DIR / variant / f"{module_name}.yml"
+    if yml_path.exists():
+        with open(yml_path) as f:
+            data = yaml.safe_load(f)
+        return data.get("name", module_name)
+
+    # Legacy .py fallback
     mod = importlib.import_module(f"{_PKG}.{variant}.{module_name}")
     return getattr(mod, "NAME", module_name)
