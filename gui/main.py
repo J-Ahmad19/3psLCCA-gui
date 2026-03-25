@@ -4,8 +4,7 @@ from PySide6.QtWidgets import QApplication, QSpinBox, QDoubleSpinBox, QComboBox,
 from PySide6.QtCore import QObject, QEvent, Qt, QTimer
 from PySide6.QtGui import QFocusEvent, QMouseEvent, QFontDatabase, QPixmap, QColor
 from gui.project_manager import ProjectManager
-from gui.palette_manager import dark, light
-from gui.theme import QSS_TOKENS, DARK_QSS_TOKENS
+from gui.themes import get_light_theme, get_dark_theme, resolve_is_dark, track_mode
 
 _QSS_PATH = os.path.join("gui", "assets", "themes", "main.qss")
 
@@ -43,13 +42,14 @@ def _is_dark(scheme=None) -> bool:
 def _apply_theme(scheme=None, app: QApplication = None) -> None:
     if app is None:
         app = QApplication.instance()
-    is_dark = _is_dark(scheme)
-    app.setPalette(dark if is_dark else light)
+    is_dark = resolve_is_dark(_is_dark(scheme))
+    track_mode(is_dark)
+    palette, tokens = get_dark_theme() if is_dark else get_light_theme()
+    app.setPalette(palette)
     if os.path.exists(_QSS_PATH):
         try:
             with open(_QSS_PATH) as f:
                 qss = f.read()
-            tokens = DARK_QSS_TOKENS if is_dark else QSS_TOKENS
             for token, value in tokens.items():
                 qss = qss.replace(token, value)
             app.setStyleSheet(qss)

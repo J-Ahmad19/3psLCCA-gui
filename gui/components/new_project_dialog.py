@@ -8,11 +8,12 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
 )
 from PySide6.QtCore import Qt
+from gui.theme import VALIDATION_ERROR
 
 
 def _set_combo_error(widget: QComboBox, error: bool):
     """Set or clear a validation error on a QComboBox via dynamic property."""
-    widget.setProperty("validationState", "#dc3545" if error else "")
+    widget.setProperty("validationState", VALIDATION_ERROR if error else "")
     widget.style().unpolish(widget)
     widget.style().polish(widget)
 

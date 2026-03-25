@@ -1,21 +1,28 @@
 """
 gui/components/first_launch_dialog.py
 
-First-launch welcome dialog — asks for the user's name.
+First-launch welcome dialog — same settings form as the sidebar Settings dialog,
+wrapped in a welcome header with "Skip" / "Get Started" buttons.
 """
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
-    QVBoxLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QPushButton,
-    QFrame,
+    QVBoxLayout,
 )
-from gui.theme import PRIMARY, SP2, SP3, SP4, SP6, SP8, SP10, BTN_MD, FS_BASE, FS_MD, FS_DISP, FW_BOLD, FW_MEDIUM
 from gui.styles import font, btn_primary, btn_outline
+from gui.theme import (
+    PRIMARY,
+    SP2, SP4, SP6, SP8, SP10,
+    BTN_MD,
+    FS_BASE, FS_DISP,
+    FW_BOLD, FW_MEDIUM,
+)
+from gui.components.settings_dialog import SettingsPanel
 
 
 class FirstLaunchDialog(QDialog):
@@ -31,7 +38,7 @@ class FirstLaunchDialog(QDialog):
         layout.setContentsMargins(SP10, SP10, SP10, SP8)
         layout.setSpacing(0)
 
-        # Brand accent bar at top
+        # Brand accent bar
         accent = QFrame()
         accent.setFixedHeight(4)
         accent.setStyleSheet(f"background: {PRIMARY}; border-radius: 2px;")
@@ -49,19 +56,11 @@ class FirstLaunchDialog(QDialog):
         sub.setFont(font(FS_BASE))
         sub.setEnabled(False)
         layout.addWidget(sub)
-        layout.addSpacing(SP8 - SP2)
+        layout.addSpacing(SP8)
 
-        # Name field label
-        name_lbl = QLabel("What should we call you?")
-        name_lbl.setFont(font(FS_BASE, FW_MEDIUM))
-        layout.addWidget(name_lbl)
-        layout.addSpacing(SP2)
-
-        self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("Enter your name...")
-        self.name_edit.setFixedHeight(BTN_MD)
-        self.name_edit.returnPressed.connect(self._accept)
-        layout.addWidget(self.name_edit)
+        # ── Shared settings panel ──────────────────────────────────────────
+        self._panel = SettingsPanel(self)
+        layout.addWidget(self._panel)
         layout.addSpacing(SP8)
 
         # Buttons
@@ -69,28 +68,26 @@ class FirstLaunchDialog(QDialog):
         btn_row.setSpacing(SP2)
         btn_row.addStretch()
 
-        self.btn_skip = QPushButton("Skip")
-        self.btn_skip.setFixedHeight(BTN_MD)
-        self.btn_skip.setFont(font(FS_BASE))
-        self.btn_skip.setStyleSheet(btn_outline())
-        self.btn_skip.clicked.connect(self.reject)
-        btn_row.addWidget(self.btn_skip)
+        btn_skip = QPushButton("Skip")
+        btn_skip.setFixedHeight(BTN_MD)
+        btn_skip.setFont(font(FS_BASE))
+        btn_skip.setStyleSheet(btn_outline())
+        btn_skip.clicked.connect(self.reject)
+        btn_row.addWidget(btn_skip)
 
-        self.btn_ok = QPushButton("Get Started")
-        self.btn_ok.setFixedHeight(BTN_MD)
-        self.btn_ok.setFont(font(FS_BASE, FW_MEDIUM))
-        self.btn_ok.setDefault(True)
-        self.btn_ok.setStyleSheet(btn_primary())
-        self.btn_ok.clicked.connect(self._accept)
-        btn_row.addWidget(self.btn_ok)
+        btn_ok = QPushButton("Get Started")
+        btn_ok.setFixedHeight(BTN_MD)
+        btn_ok.setFont(font(FS_BASE, FW_MEDIUM))
+        btn_ok.setDefault(True)
+        btn_ok.setStyleSheet(btn_primary())
+        btn_ok.clicked.connect(self._accept)
+        btn_row.addWidget(btn_ok)
 
         layout.addLayout(btn_row)
 
     def _accept(self):
-        if self.name_edit.text().strip():
-            self.accept()
-        else:
-            self.reject()
+        self._panel.save()
+        self.accept()
 
     def get_name(self) -> str:
-        return self.name_edit.text().strip()
+        return self._panel.get_name()

@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont, QColor
+from gui.theme import SUCCESS
 
 
 class RecoveryWorker(QThread):
@@ -173,7 +174,7 @@ class RecoveryDialog(QDialog):
                 msg += "\n\n⚠  Some recent changes may not have been recovered."
             if missing:
                 msg += f"\n\nMissing sections: {', '.join(missing)}"
-            self.result_label.setStyleSheet("color: #22c55e;")
+            self.result_label.setStyleSheet(f"color: {SUCCESS};")
         else:
             msg = f"❌  Recovery failed.\n\n{description}\n\nYour .ebak backup is preserved in the project's backups/ folder."
             self.result_label.setStyleSheet("color: #ef4444;")

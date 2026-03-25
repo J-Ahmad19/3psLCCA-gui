@@ -45,6 +45,10 @@ from gui.theme import (
     PRIMARY,
     PRIMARY_ACTIVE,
     MUTED,
+    SUCCESS,
+    WARNING_COLOR,
+    INFO,
+    DANGER,
     SIDEBAR_HOVER,
     SIDEBAR_SEL,
     CARD_BG,
@@ -80,6 +84,7 @@ from gui.styles import (
     btn_ghost,
     btn_ghost_checkable,
 )
+from gui.components.settings_dialog import SettingsDialog
 
 
 # ── Layout constants ──────────────────────────────────────────────────────────
@@ -122,20 +127,45 @@ def _relative_time(dt_str: str) -> str:
     return dt.strftime(fmt)
 
 
+from datetime import datetime
+import getpass
+
 def _greeting() -> str:
-    h = datetime.now().hour
-    if h < 12:
-        return "Good morning"
-    elif h < 17:
-        return "Good afternoon"
-    return "Good evening"
+    """
+    Returns a time-based greeting using system time
+    and automatically picks up the system username.
+    """
+
+    now = datetime.now()
+    hour = now.hour
+
+    # Time buckets
+    if 5 <= hour < 12:
+        greeting = "Good Morning"
+    elif 12 <= hour < 17:
+        greeting = "Good Afternoon"
+    elif 17 <= hour < 21:
+        greeting = "Good Evening"
+    else:
+        greeting = "Good Night"
+
+    # Get system username (fallback to 'User')
+    try:
+        username = getpass.getuser()
+    except Exception:
+        username = "User"
+
+    # Clean formatting
+    username = username.strip().title() if username else "User"
+
+    return f"{greeting} {username}!"
 
 
 STATUS_CONFIG = {
-    "ok": {"label": "OK", "color": "#22c55e"},
-    "crashed": {"label": "Needs recovery", "color": "#ef4444"},
-    "locked": {"label": "Open", "color": "#3b82f6"},  # blue — distinct from brand green
-    "corrupted": {"label": "Corrupted", "color": "#f97316"},
+    "ok": {"label": "OK", "color": SUCCESS},
+    "crashed": {"label": "Needs recovery", "color": DANGER},
+    "locked": {"label": "Open", "color": INFO},  # blue — distinct from brand green
+    "corrupted": {"label": "Corrupted", "color": WARNING_COLOR},
 }
 
 
@@ -269,14 +299,27 @@ class _NavButton(QWidget):
 
     @staticmethod
     def _draw_settings(p: QPainter, cx: int, cy: int):
-        # Gear: outer circle + inner circle (cutout style via pen only)
-        p.drawEllipse(QRectF(cx - 9, cy - 9, 18, 18))
-        p.drawEllipse(QRectF(cx - 4, cy - 4, 8, 8))
-        # 4 tick marks at cardinal points (gear teeth suggestion)
-        for dx, dy in [(0, -11), (0, 11), (-11, 0), (11, 0)]:
-            p.drawLine(
-                QPointF(cx + dx * 0.72, cy + dy * 0.72), QPointF(cx + dx, cy + dy)
-            )
+        import math
+        # Gear: 8 rectangular teeth + centre hole
+        N      = 8      # number of teeth
+        r_out  = 9.0    # tooth tip radius
+        r_in   = 6.5    # tooth root (valley) radius
+        r_hole = 3.5    # centre hole radius
+        half_t = math.radians(8)   # half tooth angular width
+
+        pts = []
+        for i in range(N):
+            base = math.radians(i * 360 / N) - math.pi / 2
+            for ang, r in [
+                (base - half_t, r_in),
+                (base - half_t, r_out),
+                (base + half_t, r_out),
+                (base + half_t, r_in),
+            ]:
+                pts.append(QPointF(cx + r * math.cos(ang), cy + r * math.sin(ang)))
+
+        p.drawPolygon(QPolygonF(pts))
+        p.drawEllipse(QRectF(cx - r_hole, cy - r_hole, r_hole * 2, r_hole * 2))
 
     # ── Events ────────────────────────────────────────────────────────────────
 
@@ -311,9 +354,9 @@ class _GridCardDelegate(QStyledItemDelegate):
         "corrupted": (249, 115, 22),  # orange
     }
     _STATUS_DOT = {
-        "locked": "#3b82f6",
-        "crashed": "#ef4444",
-        "corrupted": "#f97316",
+        "locked": INFO,
+        "crashed": DANGER,
+        "corrupted": WARNING_COLOR,
     }
 
     def __init__(self, parent=None):
@@ -402,7 +445,7 @@ class _GridCardDelegate(QStyledItemDelegate):
 
         # ── Locked project outline border ──────────────────────────────────
         if status == "locked":
-            lock_col = QColor("#3b82f6")
+            lock_col = QColor(INFO)
             lock_col.setAlpha(160)
             painter.setPen(QPen(lock_col, 1.5))
             painter.setBrush(Qt.NoBrush)
@@ -519,7 +562,7 @@ class _GridCardDelegate(QStyledItemDelegate):
 
         # ── Warning line (crashed / corrupted only) ────────────────────────
         if status == "crashed":
-            warn_col = QColor("#ef4444")
+            warn_col = QColor(DANGER)
             warn_col.setAlpha(210)
             painter.setPen(warn_col)
             painter.setFont(_f(FS_XS, FW_MEDIUM))
@@ -527,7 +570,7 @@ class _GridCardDelegate(QStyledItemDelegate):
                 QPoint(tx, y_warn), "Needs recovery — last save may be incomplete"
             )
         elif status == "corrupted":
-            warn_col = QColor("#f97316")
+            warn_col = QColor(WARNING_COLOR)
             warn_col.setAlpha(210)
             painter.setPen(warn_col)
             painter.setFont(_f(FS_XS, FW_MEDIUM))
@@ -705,16 +748,18 @@ class HomePage(QWidget):
 
         layout.addStretch()
 
-        # ── Settings (bottom anchor) — TODO: uncomment when settings page is ready
-        # settings_btn = _NavButton(_NavButton.SETTINGS, "Settings")
-        # settings_btn.setToolTip("Settings & Preferences")
-        # settings_btn.clicked.connect(
-        #     lambda: self.manager.open_settings()
-        #     if hasattr(self.manager, "open_settings") else None
-        # )
-        # layout.addWidget(settings_btn)
+        # ── Settings (bottom anchor) ───────────────────────────────────────
+        settings_btn = _NavButton(_NavButton.SETTINGS, "Settings")
+        settings_btn.setToolTip("Settings & Preferences")
+        settings_btn.clicked.connect(lambda: self._open_settings())
+        layout.addWidget(settings_btn)
 
         return sidebar
+
+    def _open_settings(self):
+        dlg = SettingsDialog(self)
+        if dlg.exec() == QDialog.Accepted:
+            self._update_greeting()
 
     # ── Right panel ───────────────────────────────────────────────────────────
 

@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QColor
+from gui.theme import PLACEHOLDER
 
 
 class RollbackDialog(QDialog):
@@ -127,7 +128,7 @@ class RollbackDialog(QDialog):
         if not chunks:
             placeholder = QListWidgetItem("No chunks found.")
             placeholder.setFlags(placeholder.flags() & ~Qt.ItemIsSelectable)
-            placeholder.setForeground(QColor("#888"))
+            placeholder.setForeground(QColor(PLACEHOLDER))
             self.chunk_list.addItem(placeholder)
             return
         for name in chunks:
@@ -151,7 +152,7 @@ class RollbackDialog(QDialog):
             item.setData(Qt.UserRole, opt)
             # Grey out "Current" slightly to indicate it's already active
             if opt["label"] == "Current":
-                item.setForeground(QColor("#888"))
+                item.setForeground(QColor(PLACEHOLDER))
             self.version_list.addItem(item)
 
     def _on_version_selected(self, current, _previous):

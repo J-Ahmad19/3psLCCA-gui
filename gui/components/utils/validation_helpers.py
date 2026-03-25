@@ -56,6 +56,7 @@ from PySide6.QtWidgets import (
 )
 
 from .form_builder.form_definitions import FieldDef
+from gui.theme import VALIDATION_ERROR
 
 
 # ── Style helpers ─────────────────────────────────────────────────────────────
@@ -156,7 +157,7 @@ def validate_form(
             error_keys.add(f.key)
             continue
         if isinstance(widget, QLineEdit) and not widget.text().strip():
-            _apply_border_style(widget, "#dc3545")
+            _apply_border_style(widget, VALIDATION_ERROR)
             errors.append(f"Missing: {f.title}")
             error_keys.add(f.key)
         elif (isinstance(widget, QAbstractSpinBox)
@@ -164,7 +165,7 @@ def validate_form(
               and widget.value() == widget.minimum()):
             # Spinbox with an explicit default uses the minimum as the "blank" sentinel.
             # If still at minimum it has never been filled — treat as a required error.
-            _apply_border_style(widget, "#dc3545")
+            _apply_border_style(widget, VALIDATION_ERROR)
             errors.append(f"Required: {f.title}")
             error_keys.add(f.key)
         # QSpinBox/QDoubleSpinBox without default: 0 is a valid value — use warn_rules

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
+from gui.theme import VALIDATION_ERROR
 
 from gui.components.base_widget import ScrollableForm
 from gui.components.utils.form_builder.form_definitions import ValidationStatus
@@ -91,7 +92,7 @@ class OutputsPage(ScrollableForm):
 
         if all_errors:
             banner = QGroupBox()
-            banner.setStyleSheet("QGroupBox { border: 2px solid #dc3545; padding: 8px; }")
+            banner.setStyleSheet(f"QGroupBox {{ border: 2px solid {VALIDATION_ERROR}; padding: 8px; }}")
             layout = QVBoxLayout(banner)
             title = QLabel("🛑  Calculation Blocked — Please fix the errors below.")
             title.setStyleSheet("color: #b02a37; font-weight: bold;")
@@ -233,7 +234,7 @@ class OutputsPage(ScrollableForm):
     def _show_calculation_error(self, error: Exception, tb: str = ""):
         self._clear_status()
         banner = QGroupBox()
-        banner.setStyleSheet("QGroupBox { border: 2px solid #dc3545; padding: 8px; }")
+        banner.setStyleSheet(f"QGroupBox {{ border: 2px solid {VALIDATION_ERROR}; padding: 8px; }}")
         layout = QVBoxLayout(banner)
 
         # ── Short summary ──────────────────────────────────────────────────

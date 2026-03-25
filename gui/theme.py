@@ -32,6 +32,13 @@ SURFACE        = "#e9ecef"   # neutral hover background
 SURFACE_ACTIVE = "#dee2e6"   # neutral pressed background
 CARD_BG        = "#fafafa"   # card / list-item explicit background
 
+# ── Semantic status ────────────────────────────────────────────────────────
+SUCCESS          = "#22c55e"   # ok / pass / include
+WARNING_COLOR    = "#f97316"   # corrupted / warning  (avoids clash with stdlib `WARNING`)
+INFO             = "#3b82f6"   # locked / informational
+VALIDATION_ERROR = "#dc3545"   # Bootstrap-style form validation red
+PLACEHOLDER      = "#888888"   # empty-state / placeholder text
+
 # ── Sidebar states (pre-computed solid — no alpha blending) ───────────────
 # PRIMARY at 12% on BODY_BG (#f8f9fa) → fully opaque light green
 SIDEBAR_HOVER  = "#ecf0de"

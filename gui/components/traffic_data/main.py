@@ -29,6 +29,7 @@ from ..utils.wpi_manager import WPIManager, WPIProfile
 from .wpi_table import _WPITable
 from .wpi_selector import _WPISelector
 from ..utils.table_widgets import TableDoubleSpinBox, TableSpinBox, TABLE_SPINBOX_BASE_QSS, mark_editable_column, TooltipTableMixin
+from gui.theme import VALIDATION_ERROR
 
 # ── WPI DB path ───────────────────────────────────────────────────────────────
 
@@ -1060,7 +1061,7 @@ class TrafficData(ScrollableForm):
             if hasattr(self, "alternate_road_carriageway"):
                 if self.alternate_road_carriageway.currentText() == _NONE_LANE:
                     errors.append("Alternate Road Carriageway must be selected")
-                    self.alternate_road_carriageway.setProperty("validationState", "#dc3545")
+                    self.alternate_road_carriageway.setProperty("validationState", VALIDATION_ERROR)
                     self.alternate_road_carriageway.style().unpolish(self.alternate_road_carriageway)
                     self.alternate_road_carriageway.style().polish(self.alternate_road_carriageway)
                 else:
@@ -1069,7 +1070,7 @@ class TrafficData(ScrollableForm):
                     self.alternate_road_carriageway.style().polish(self.alternate_road_carriageway)
                 if hasattr(self, "carriage_width_in_m") and self.carriage_width_in_m.value() == 0.0:
                     errors.append("Carriageway Width cannot be 0")
-                    self.carriage_width_in_m.setStyleSheet("border: 1px solid #dc3545;")
+                    self.carriage_width_in_m.setStyleSheet(f"border: 1px solid {VALIDATION_ERROR};")
 
             vehicle_data = self._vehicle_table.collect_to_dict()
             total_vpd = sum(v["vehicles_per_day"] for v in vehicle_data.values())
@@ -1110,7 +1111,7 @@ class TrafficData(ScrollableForm):
                 # Hourly capacity must be > 0
                 if hasattr(self, "hourly_capacity") and self.hourly_capacity.value() == 0:
                     errors.append("Hourly Capacity cannot be 0")
-                    self.hourly_capacity.setStyleSheet("border: 1px solid #dc3545;")
+                    self.hourly_capacity.setStyleSheet(f"border: 1px solid {VALIDATION_ERROR};")
 
                 # Peak hour validation
                 n_peak = self.num_peak_hours.value() if hasattr(self, "num_peak_hours") else 0
@@ -1153,7 +1154,7 @@ class TrafficData(ScrollableForm):
         else:
             lines = []
             for e in errors:
-                lines.append(f'<span style="color:#dc3545;">&#10006; {e}</span>')
+                lines.append(f'<span style="color:{VALIDATION_ERROR};">&#10006; {e}</span>')
             for w in warnings:
                 lines.append(f'<span style="color:#e65100;">&#9888; {w}</span>')
             html = "<br>".join(lines)
