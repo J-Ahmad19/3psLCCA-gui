@@ -1,0 +1,41 @@
+# gui/themes/dark/dracula.yml — Dracula dark theme.
+#
+# Dracula palette reference: https://draculatheme.com/contribute
+#   Background  #282a36   Current Line  #44475a   Foreground  #f8f8f2
+#   Comment     #6272a4   Cyan          #8be9fd   Green       #50fa7b
+#   Orange      #ffb86c   Pink          #ff79c6   Purple      #bd93f9
+#   Red         #ff5555   Yellow        #f1fa8c
+#
+# Brand tokens ($primary / hover / active) are preserved so buttons and
+# accents stay on-brand while the chrome uses Dracula's palette.
+name: Dracula
+
+palette:
+  accent:           "#6B7D20"   # brand olive-green accent (kept for consistency)
+  window:           "#282a36"   # Background — main window
+  alternate_base:   "#21222c"   # Elevated — inputs, cards (darker than bg)
+  base:             "#21222c"
+  button:           "#44475a"   # Current Line
+  mid:              "#44475a"
+  midlight:         "#565869"
+  light:            "#565869"
+  highlight:        "#bd93f9"   # Purple — selection
+  highlighted_text: "#282a36"   # Background (text on selection)
+  text:             "#f8f8f2"   # Foreground
+  window_text:      "#f8f8f2"
+  button_text:      "#f8f8f2"
+  placeholder_text: "#6272a4"   # Comment — muted / placeholder
+
+qss_tokens:
+  "$primary-hover":  "#0b5ed7"
+  "$primary-active": "#0a58ca"
+  "$border-subtle":  "#565869"
+  "$surface-active": "#44475a"   # Current Line
+  "$body-color":     "#f8f8f2"
+  "$secondary":      "#6272a4"   # Comment
+  "$primary":        "#0d6efd"
+  "$body-bg":        "#282a36"
+  "$border":         "#44475a"
+  "$surface":        "#383a4a"   # between bg and current-line
+  "$muted":          "#4d5068"
+  "$white":          "#21222c"   # elevated surface (inputs, cards, tables)
