@@ -98,12 +98,10 @@ class NewProjectDialog(QDialog):
         self.currency_input.addItem("— Select currency —", "")
         for code in CURRENCIES:
             self.currency_input.addItem(code, code)
-        self.currency_input.currentIndexChanged.connect(
-            lambda: self.currency_input.setStyleSheet("") if self.currency_input.currentData() else None
-        )
+        self.currency_input.setEnabled(False)
         layout.addWidget(self.currency_input)
 
-        currency_hint = QLabel("Cannot be changed after project creation.")
+        currency_hint = QLabel("Auto-filled based on the selected country. Cannot be changed after project creation.")
         currency_hint.setEnabled(False)
         layout.addWidget(currency_hint)
 
@@ -145,7 +143,6 @@ class NewProjectDialog(QDialog):
 
         self.name_input.setStyleSheet("" if name_ok else "border: 1.5px solid #e53e3e;")
         _set_combo_error(self.country_input, not country_ok)
-        _set_combo_error(self.currency_input, not currency_ok)
 
         if name_ok and country_ok and currency_ok:
             self._lock_inputs()
