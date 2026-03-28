@@ -41,6 +41,7 @@ class SaveCheckpointDialog(QDialog):
         self.setWindowTitle("Save Checkpoint")
         self.setFixedWidth(420)
         self.setModal(True)
+        self.setAutoFillBackground(True)
 
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
