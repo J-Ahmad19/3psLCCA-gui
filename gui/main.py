@@ -192,9 +192,13 @@ def main():
     QTimer.singleShot(0, _load_custom_units)
 
     # Install Global Event Filters
-    app.installEventFilter(DisableSpinBoxScroll())
-    app.installEventFilter(_TableRowSelectFilter())
-    app.installEventFilter(SelectTextOnFocus())
+    # NOTE: named references required — Python GC will collect anonymous instances
+    wheel_filter = DisableSpinBoxScroll()
+    table_filter = _TableRowSelectFilter()
+    focus_filter = SelectTextOnFocus()
+    app.installEventFilter(wheel_filter)
+    app.installEventFilter(table_filter)
+    app.installEventFilter(focus_filter)
 
     # Runtime Theme Switching (Qt 6.5+)
     try:
