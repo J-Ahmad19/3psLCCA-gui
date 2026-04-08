@@ -887,14 +887,6 @@ class MaterialDialog(QDialog):
             "e.g. Ready-mix Concrete M25  (type ? to browse all)"
         )
         self.name_in.setMinimumHeight(32)
-        
-        from PySide6.QtWidgets import QStyle
-        action = self.name_in.addAction(
-            self.style().standardIcon(QStyle.SP_ArrowDown), 
-            QLineEdit.TrailingPosition
-        )
-        action.triggered.connect(lambda: self._active_completer.complete() if getattr(self, '_active_completer', None) else None)
-        
         root.addWidget(self.name_in)
 
         # ── Item ID (Always visible) ──────────────────────────────────────
@@ -1384,8 +1376,6 @@ class MaterialDialog(QDialog):
                 )
                 self._active_completer.setCaseSensitivity(Qt.CaseInsensitive)
                 self._active_completer.setMaxVisibleItems(10)
-                # Fix recommendation dropdown overflow
-                self._active_completer.popup().setTextElideMode(Qt.ElideRight)
                 
                 self._active_completer.activated.connect(self._on_suggestion_selected)
                 self.name_in.setCompleter(self._active_completer)

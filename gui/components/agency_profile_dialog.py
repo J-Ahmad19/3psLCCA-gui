@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QDialogButtonBox, QInputDial
 from core import start_manager as sm
 
 from gui.components.base_widget import ScrollableForm
-from gui.components.global_info.main import AGENCY_FIELDS, BASE_DOCS_URL
+from gui.components.global_info.main import AGENCY_FIELDS
 from gui.components.utils.form_builder.form_builder import build_form
 from gui.components.utils.form_builder.form_definitions import Section
 
@@ -23,7 +23,7 @@ class AgencyProfileForm(ScrollableForm):
         
         # Remove the heading section since the tab itself serves as the heading
         fields_no_heading = [f for f in AGENCY_FIELDS if not isinstance(f, Section)]
-        self.required_keys = build_form(self, fields_no_heading, BASE_DOCS_URL)
+        self.required_keys = build_form(self, fields_no_heading)
         
         # Try to load latest saved from preferences soform isn't empty if opened repeatedly
         saved = sm.get_pref("agency_profile", "{}")
