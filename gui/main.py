@@ -212,6 +212,7 @@ def main():
     if sm.is_first_launch():
         from gui.components.first_launch_dialog import FirstLaunchDialog
 
+        splash.hide()
         dlg = FirstLaunchDialog()
         if dlg.exec() == FirstLaunchDialog.Accepted:
             sm.set_name(dlg.get_name())
