@@ -75,7 +75,7 @@ NITI_FIELDS = [
         "As NITI Aayog values are in INR, provide conversion to your global currency.",
         "float",
         options=(1e-6, 1e6, DECIMAL_PLACES),
-        unit="Currency/INR",
+        unit="(Currency/INR)",
     ),
 ]
 RICKE_FIELDS = [
@@ -86,7 +86,7 @@ RICKE_FIELDS = [
         "Conversion rate for international scientific model outputs.",
         "float",
         options=(1e-6, 1e6, DECIMAL_PLACES),
-        unit="Currency/USD",
+        unit="(Currency/USD)",
     ),
     FieldDef(
         "ssp_scenario",
@@ -110,7 +110,7 @@ CUSTOM_FIELDS = [
         "The financial cost attributed to 1 kg of CO₂e emissions.",
         "float",
         options=(0.0, 1e6, DECIMAL_PLACES),
-        unit="Currency/kgCO₂e",
+        unit="(Currency/kgCO₂e)",
     ),
 ]
 

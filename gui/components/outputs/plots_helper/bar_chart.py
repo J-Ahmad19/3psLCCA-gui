@@ -11,6 +11,7 @@ import matplotlib
 matplotlib.use("QtAgg")
 import matplotlib.pyplot as plt
 
+from gui.themes import get_token
 from ..lcc_data import sci_label
 
 
@@ -42,10 +43,13 @@ def create_bar_chart(
     fig, ax = plt.subplots(figsize=(fig_width, 6))
     fig.patch.set_facecolor(bg_color)
     ax.set_facecolor(bg_color)
-    ax.tick_params(colors=text_color)
+    ax.tick_params(axis='x', colors=text_color, labelsize=6)
+    ax.tick_params(axis='y', colors=text_color, labelsize=7)
     ax.yaxis.label.set_color(text_color)
+    
     for spine in ax.spines.values():
         spine.set_edgecolor(text_color)
+        spine.set_linewidth(1.0)
 
     # Stage background panels
     for stage in stage_info:
@@ -71,6 +75,24 @@ def create_bar_chart(
             ha="center", va="bottom", fontsize=8, fontweight="bold",
             color=text_color,
         )
+
+    # ── Grand Total at Top ────────────────────────────────────────────────
+    total_lcca = sum(values)
+    ax.text(
+        0.5, 1.12,
+        f"TOTAL LIFE CYCLE COST (NPV): {total_lcca:,.2f} Million {currency}",
+        transform=ax.transAxes,
+        ha="center", va="bottom",
+        fontsize=12, fontweight="bold",
+        bbox=dict(
+            facecolor=bg_color,
+            edgecolor=get_token("primary"),
+            boxstyle="round,pad=0.6",
+            alpha=0.15,
+            linewidth=1.5
+        ),
+        color=text_color,
+    )
 
     # Y-axis limits with generous padding for rotated bar labels
     max_val = float(max(values))
@@ -112,6 +134,11 @@ def create_bar_chart(
     # Axes styling
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(True)
+    ax.spines["bottom"].set_visible(True)
+    ax.spines["left"].set_edgecolor(text_color)
+    ax.spines["bottom"].set_edgecolor(text_color)
+    
     ax.set_xticks(x)
 
     wrapped = [
@@ -135,5 +162,5 @@ def create_bar_chart(
         tick_lbl.set_color(tick_color_map.get(i, text_color))
 
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.40, top=0.88)
+    plt.subplots_adjust(bottom=0.40, top=0.82)
     return fig, bars

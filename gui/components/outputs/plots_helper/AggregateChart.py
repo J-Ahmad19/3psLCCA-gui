@@ -142,8 +142,13 @@ class SustainabilityBarPlotter:
                         stage_idx = int(round(x_pos))
                         if 0 <= stage_idx < len(self.stages):
                             val = self.values[cat][stage_idx]
-                            # Use Indian format for tooltips
-                            self.annot.set_text(f"{self.stages[stage_idx]}\n{cat}: {fmt_currency(val, self.currency, decimals=2)} Million")
+                            actual_val = val * 1_000_000
+                            # Use Indian format for tooltips, showing actual value
+                            self.annot.set_text(
+                                f"{self.stages[stage_idx]}\n"
+                                f"{cat}: {fmt_currency(val, self.currency, decimals=2)} Million\n"
+                                f"Actual: {self.currency} {fmt_currency(actual_val, self.currency, decimals=0)}"
+                            )
                             self.annot.xy = (event.xdata, event.ydata)
                             self.annot.set_visible(True)
                             found = True
@@ -160,13 +165,34 @@ class SustainabilityBarPlotter:
             self._apply_rounded_corners(container)
             bottom += self.values[cat]
 
+        # ── Totals at top ───────────────────────────────────────────────────
+        for i, total in enumerate(bottom):
+            if total > 0:
+                self.ax.text(
+                    i, total + (max(bottom) * 0.02 if max(bottom) > 0 else 1),
+                    f"{fmt_currency(total, self.currency, decimals=2)}",
+                    ha='center', va='bottom', fontsize=8, fontweight='bold', 
+                    color=text_color
+                )
+
         self.ax.set_xticks(x)
         self.ax.set_xticklabels(self.stages, fontweight='bold', color=text_color, fontsize=9)
         self.ax.set_ylabel(f"Total Cost (Million {self.currency})", fontweight='bold', color=text_color, fontsize=9)
         self.ax.tick_params(axis='both', colors=text_color, labelsize=8)
         self.ax.yaxis.grid(True, linestyle='--', alpha=0.3, color=grid_color)
         self.ax.set_axisbelow(True)
+        
+        # Increase Y-limit to make room for labels
+        if len(bottom) > 0 and max(bottom) > 0:
+            self.ax.set_ylim(0, max(bottom) * 1.15)
+            
         for s in self.ax.spines.values(): s.set_visible(False)
+        self.ax.spines["left"].set_visible(True)
+        self.ax.spines["bottom"].set_visible(True)
+        self.ax.spines["left"].set_edgecolor(text_color)
+        self.ax.spines["bottom"].set_edgecolor(text_color)
+        self.ax.spines["left"].set_linewidth(0.8)
+        self.ax.spines["bottom"].set_linewidth(0.8)
 
         self.annot = self.ax.annotate("", xy=(0,0), xytext=(15,15), textcoords="offset points", bbox=dict(boxstyle="round,pad=0.5", fc=get_token("base"), ec=get_token("surface_mid"), alpha=0.9), zorder=10, fontweight='bold', color=text_color, fontsize=8)
         self.annot.set_visible(False)
@@ -221,7 +247,7 @@ class AggregateChartWidget(QWidget):
         title_box.addStretch()
         self._text_v.addLayout(title_box)
 
-        desc = QLabel("Comparative analysis of cumulative project impacts across all design phases. This stacked visualization highlights the proportional distribution of direct capital investments versus long-term externalized liabilities, enabling data-driven optimization of material selection and maintenance scheduling.")
+        desc = QLabel("Comparative analysis of cumulative project impacts across three core lifecycle phases: Initial construction, the combined Use/Maintenance/Reconstruction stage, and final End-of-Life. This stacked visualization highlights the proportional distribution of direct capital investments versus long-term externalized liabilities.")
         desc.setWordWrap(True)
         desc.setAlignment(Qt.AlignCenter)
         desc.setStyleSheet(f"font-size: {FS_MD}pt; color: {get_token('text_secondary')}; line-height: 1.5; border: none; background: transparent;")
@@ -238,18 +264,22 @@ class AggregateChartWidget(QWidget):
 
         ratio_box = QFrame()
         ratio_box.setStyleSheet(f"background: transparent; border: 1px solid {get_token('surface_mid')}; border-radius: {RADIUS_LG}px;")
+        ratio_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
         rb_v = QVBoxLayout(ratio_box)
         rb_v.setContentsMargins(SP4, SP4, SP4, SP4)
-        rb_v.setAlignment(Qt.AlignCenter)
-        
+        rb_v.setSpacing(SP2)
+
         rb_label = QLabel("INITIAL : USE : END-OF-LIFE")
         rb_label.setAlignment(Qt.AlignCenter)
-        rb_label.setStyleSheet(f"font-size: {FS_XS}pt; font-weight: bold; color: {get_token('text_disabled')}; letter-spacing: 1.2px; border: none; background: transparent;")
+        rb_label.setWordWrap(True)
+        rb_label.setStyleSheet(f"font-size: {FS_SM}pt; font-weight: bold; color: {get_token('text_disabled')}; letter-spacing: 1.2px; border: none; background: transparent;")
         rb_v.addWidget(rb_label)
-        
+
         rb_val = QLabel(stage_ratio)
         rb_val.setAlignment(Qt.AlignCenter)
-        rb_val.setStyleSheet(f"font-size: {FS_LG}pt; color: {get_token('text')}; margin-top: 8px; font-family: 'Consolas', monospace; border: none; background: transparent;")
+        rb_val.setWordWrap(True)
+        rb_val.setStyleSheet(f"font-size: {FS_LG}pt; color: {get_token('text')}; font-family: 'Consolas', monospace; border: none; background: transparent;")
         rb_v.addWidget(rb_val)
         
         self._text_v.addWidget(ratio_box)
@@ -267,7 +297,7 @@ class AggregateChartWidget(QWidget):
             self.plotter = plotter
             self._chart_canvas = FigureCanvasQTAgg(fig)
             self._chart_canvas.setStyleSheet("background: transparent; border: none;")
-            self._chart_canvas.setMinimumSize(450, 350)
+            self._chart_canvas.setMinimumHeight(280)
             
             self._chart_container = QWidget()
             cc_lay = QVBoxLayout(self._chart_container)
@@ -292,11 +322,13 @@ class AggregateChartWidget(QWidget):
         if is_narrow:
             self._card_layout.setDirection(QBoxLayout.Direction.TopToBottom)
             self._card_layout.insertWidget(0, self._text_panel)
-            self._text_panel.setMaximumWidth(width - 100)
+            # Reset fixed width set in wide mode so the panel can use full available width
+            self._text_panel.setMinimumWidth(0)
+            self._text_panel.setMaximumWidth(16777215)
         else:
             self._card_layout.setDirection(QBoxLayout.Direction.LeftToRight)
             self._card_layout.insertWidget(0, self._chart_widget)
             self._text_panel.setFixedWidth(350)
 
     def minimumSizeHint(self):
-        return QSize(250, 600)
+        return QSize(0, 400)

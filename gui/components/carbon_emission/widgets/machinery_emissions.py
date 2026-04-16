@@ -148,7 +148,7 @@ LUMPSUM_ELEC_FIELDS = [
         "Total electricity consumed per working day across all equipment.",
         "float",
         options=(0.0, 1e12, DECIMAL_PLACES),
-        unit="kWh/day",
+        unit="(kWh/day)",
     ),
     FieldDef(
         "elec_days",
@@ -156,7 +156,7 @@ LUMPSUM_ELEC_FIELDS = [
         "Total number of working days for electricity consumption.",
         "int",
         options=(0, 9999),
-        unit="days",
+        unit="(days)",
     ),
     FieldDef(
         "elec_ef",
@@ -164,7 +164,7 @@ LUMPSUM_ELEC_FIELDS = [
         "Grid electricity emission factor (kg CO₂e per kWh).",
         "float",
         options=(0.0, 999.0, DECIMAL_PLACES),
-        unit="kg CO₂e/kWh",
+        unit="(kg CO₂e/kWh)",
     ),
 ]
 
@@ -176,7 +176,7 @@ LUMPSUM_FUEL_FIELDS = [
         "Total fuel consumed per working day across all equipment.",
         "float",
         options=(0.0, 1e12, DECIMAL_PLACES),
-        unit="litres/day",
+        unit="(litres/day)",
     ),
     FieldDef(
         "fuel_days",
@@ -184,7 +184,7 @@ LUMPSUM_FUEL_FIELDS = [
         "Total number of working days for fuel consumption.",
         "int",
         options=(0, 9999),
-        unit="days",
+        unit="(days)",
     ),
     FieldDef(
         "fuel_ef",
@@ -192,7 +192,7 @@ LUMPSUM_FUEL_FIELDS = [
         "Emission factor (kg CO₂e per litre).",
         "float",
         options=(0.0, 999.0, DECIMAL_PLACES),
-        unit="kg CO₂e/litre",
+        unit="(kg CO₂e/litre)",
     ),
 ]
 
@@ -212,7 +212,7 @@ DETAILED_FIELDS = [
         "Set a default number of working days then click Apply to All Rows.",
         "int",
         options=(0, 9999),
-        unit="days",
+        unit="(days)",
     ),
 ]
 

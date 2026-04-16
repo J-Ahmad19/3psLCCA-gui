@@ -195,21 +195,31 @@ STAGE_DEFS = [
 
 
 def stage_totals(results: dict, result_key: str, cat_keys: dict) -> dict:
-    """Return {category: total_M_INR} for one stage."""
+    """Return {category: total_M_INR} for one stage.
+    
+    Sums all keys in each pillar dict (Economic, Environmental, Social)
+    found under results[result_key]. Treats 'total_scrap_value' as a credit.
+    """
     stage_data = results.get(result_key, {})
-    if not isinstance(stage_data.get("economic", None), dict):
+    if not isinstance(stage_data, dict):
         return {}
+
     totals = {}
-    for cat, keys in cat_keys.items():
+    # We iterate over the categories defined in STAGE_DEFS (usually Economic, Environmental, Social)
+    for cat in cat_keys.keys():
         cat_key = cat.lower()
         cat_data = stage_data.get(cat_key, {})
-        total = 0.0
-        for k in keys:
-            if k.startswith("-"):
-                total -= M(cat_data.get(k[1:], 0.0))
-            else:
-                total += M(cat_data.get(k, 0.0))
-        totals[cat] = total
+        
+        total_val = 0.0
+        if isinstance(cat_data, dict):
+            for k, v in cat_data.items():
+                if k == "total_scrap_value":
+                    total_val -= M(v)
+                else:
+                    total_val += M(v)
+        
+        totals[cat] = total_val
+        
     return totals
 
 

@@ -64,6 +64,8 @@ BREAKDOWN_STAGES = [
              "Demolition & Disposal"),
             ("economic",     "time_cost_of_loan",
              "Loan Interest"),
+            ("economic",     "total_scrap_value",
+             "Scrap Value Credit"),
             ("environmental","carbon_cost_of_reconstruction_after_demolition",
              "Reconstruction Emissions"),
             ("environmental","carbon_costs_demolition_and_disposal",
@@ -86,6 +88,8 @@ BREAKDOWN_STAGES = [
         "rows": [
             ("economic",     "total_demolition_and_disposal_costs",
              "Demolition & Disposal"),
+            ("economic",     "total_scrap_value",
+             "Scrap Value Credit"),
             ("environmental","carbon_costs_demolition_and_disposal",
              "Demolition Material Emissions"),
             ("environmental","demolition_vehicular_emission_cost",

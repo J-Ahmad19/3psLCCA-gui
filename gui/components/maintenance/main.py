@@ -36,7 +36,7 @@ MAINTENANCE_FIELDS = [
         "Cost incurred for routine inspection expressed as percentage of initial construction cost",
         "float",
         options=(0.0, 100.0, 2),
-        unit="% of initial construction cost",
+        unit="(% of initial construction cost)",
         required=True,
         default=0.0,
         warn=(0.01, 100.0, "Routine Inspection Cost is 0 - cost will not be included"),
@@ -64,7 +64,7 @@ MAINTENANCE_FIELDS = [
         "Cost incurred for periodic maintenance  expressed as percentage of initial construction cost",
         "float",
         options=(0.0, 100.0, 1),
-        unit="% of initial construction cost",
+        unit="(% of initial construction cost)",
         required=True,
         default=0.0,
         warn=(
@@ -174,7 +174,7 @@ MAINTENANCE_FIELDS = [
         "Duration of major repair works.",
         "int",
         options=(0, 60),
-        unit="(mo)",
+        unit="(months)",
         required=True,
         default=0,
         warn=(

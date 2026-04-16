@@ -151,7 +151,7 @@ class SustainabilityCircularPlotter:
         if self.mode == "Percentage":
             total = self.total_value if self.total_value > 0 else 1.0
             return f"{(val / total * 100):.1f}%"
-        return f"{fmt_currency(val, self.currency, decimals=2)} Million"
+        return f"{fmt_currency(val, self.currency, decimals=2)} Million {self.currency}"
 
     def _hover(self, event):
         if event.inaxes != self.ax or not hasattr(self, 'annot'): return
@@ -239,19 +239,22 @@ class LCCPieWidget(QWidget):
 
         self._ratio_box = QFrame()
         self._ratio_box.setStyleSheet(f"background: transparent; border: 1px solid {get_token('surface_mid')}; border-radius: {RADIUS_LG}px;")
-        # Ensure no fixed height
-        self._ratio_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        
+        self._ratio_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
         rb_v = QVBoxLayout(self._ratio_box)
-        rb_v.setContentsMargins(SP4, SP4, SP4, SP4); rb_v.setAlignment(Qt.AlignCenter)
-        
+        rb_v.setContentsMargins(SP4, SP4, SP4, SP4)
+        rb_v.setSpacing(SP2)
+
         rb_label = QLabel("ECONOMIC : ENVIRONMENTAL : SOCIAL")
-        rb_label.setAlignment(Qt.AlignCenter); rb_label.setWordWrap(True)
-        rb_label.setStyleSheet(f"font-size: {FS_XS}pt; font-weight: bold; color: {get_token('text_disabled')}; letter-spacing: 1.2px; border: none;")
+        rb_label.setAlignment(Qt.AlignCenter)
+        rb_label.setWordWrap(True)
+        rb_label.setStyleSheet(f"font-size: {FS_SM}pt; font-weight: bold; color: {get_token('text_disabled')}; letter-spacing: 1.2px; border: none;")
         rb_v.addWidget(rb_label)
-        
-        rb_val = QLabel(pillar_ratio); rb_val.setAlignment(Qt.AlignCenter); rb_val.setWordWrap(True)
-        rb_val.setStyleSheet(f"font-size: {FS_LG}pt; color: {get_token('text')}; margin-top: 8px; font-family: 'Consolas', monospace; border: none;")
+
+        rb_val = QLabel(pillar_ratio)
+        rb_val.setAlignment(Qt.AlignCenter)
+        rb_val.setWordWrap(True)
+        rb_val.setStyleSheet(f"font-size: {FS_LG}pt; color: {get_token('text')}; font-family: 'Consolas', monospace; border: none;")
         rb_v.addWidget(rb_val)
         self._left_v.addWidget(self._ratio_box)
 
@@ -266,7 +269,10 @@ class LCCPieWidget(QWidget):
         else:
             plotter = SustainabilityCircularPlotter(data, currency=self._currency)
             fig = plotter.setup_plot(); self.plotter = plotter
-            self._chart_widget = FigureCanvasQTAgg(fig); self._chart_widget.setMinimumSize(450, 450); self._chart_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred); self._chart_widget.setStyleSheet("background: transparent; border: none;")
+            self._chart_widget = FigureCanvasQTAgg(fig)
+            self._chart_widget.setMinimumHeight(400)
+            self._chart_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            self._chart_widget.setStyleSheet("background: transparent; border: none;")
             self._mode_cb.toggled.connect(self.plotter.set_mode); self._scroller = WheelForwarder(self); self._chart_widget.installEventFilter(self._scroller)
         self._card_layout.addWidget(self._chart_widget, 2); self._main_v.addWidget(self.card)
 
@@ -274,7 +280,13 @@ class LCCPieWidget(QWidget):
         super().resizeEvent(event)
         width = event.size().width()
         is_narrow = width < 850
-        if is_narrow: self._card_layout.setDirection(QBoxLayout.Direction.TopToBottom); self._left_panel.setMaximumWidth(width - 100)
-        else: self._card_layout.setDirection(QBoxLayout.Direction.LeftToRight); self._left_panel.setFixedWidth(350) 
+        if is_narrow:
+            self._card_layout.setDirection(QBoxLayout.Direction.TopToBottom)
+            # Reset fixed width set in wide mode so the panel can use full available width
+            self._left_panel.setMinimumWidth(0)
+            self._left_panel.setMaximumWidth(16777215)
+        else:
+            self._card_layout.setDirection(QBoxLayout.Direction.LeftToRight)
+            self._left_panel.setFixedWidth(350)
 
-    def minimumSizeHint(self): return QSize(250, 600)
+    def minimumSizeHint(self): return QSize(0, 400)

@@ -165,7 +165,7 @@ TRAFFIC_FIELDS = [
         "",
         "float",
         (0.0, 999.0, 2),
-        unit="m",
+        unit="(m)",
         required=True,
     ),
     FieldDef(
@@ -174,7 +174,7 @@ TRAFFIC_FIELDS = [
         "",
         "int",
         (0, 99999),
-        unit="veh/hr",
+        unit="(veh/hr)",
         required=True,
     ),
     Section("Accident Severity Distribution"),
@@ -313,7 +313,7 @@ OUTSIDE_INDIA_FIELDS = [
         "",
         "float",
         (0.0, 1e15, 2),
-        unit="/ day",
+        unit="(/ day)",
     ),
 ]
 

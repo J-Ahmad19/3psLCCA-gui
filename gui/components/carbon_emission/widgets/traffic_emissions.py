@@ -63,7 +63,7 @@ DIRECT_FIELDS = [
         "Enter the total carbon emissions from traffic diversion per day of construction.",
         "float",
         (0.0, 1e12, DECIMAL_PLACES),
-        unit="kgCO₂e/day",
+        unit="(kgCO₂e/day)",
     ),
 ]
 

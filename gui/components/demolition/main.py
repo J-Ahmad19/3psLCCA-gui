@@ -51,7 +51,7 @@ DEMOLITION_FIELDS = [
         "Time taken for demolition work in months",
         "int",
         (0, 60),
-        unit="(mo)",
+        unit="(months)",
         required=True,
         default=0,
     ),
