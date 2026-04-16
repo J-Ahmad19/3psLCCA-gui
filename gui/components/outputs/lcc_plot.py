@@ -889,6 +889,7 @@ class LCCChartWidget(QWidget):
 
         self._canvas = FigureCanvasQTAgg(fig)
         self._canvas.setMinimumHeight(480)
+        self._canvas.setMaximumHeight(600)
         self._canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self._scroll_forwarder = _ScrollForwarder(self)
         self._canvas.installEventFilter(self._scroll_forwarder)

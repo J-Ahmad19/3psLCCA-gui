@@ -161,40 +161,27 @@ def _ensure_tokens() -> None:
 _missing_token_cache: set[str] = set()
 
 def get_token(name: str, state: str = "") -> str:
-    """Return the hex colour for a semantic palette key.
-
-    Parameters
-    ----------
-    name  : semantic key, e.g. "primary", "text", "danger"
-    state : optional UI state ("hover", "pressed", "focus", "disabled")
-
-    Returns
-    -------
-    str : "#RRGGBB" or "#AARRGGBB" (for state), or "" if missing
-    """
+    """Return the hex colour or constant for a semantic key."""
     _ensure_tokens()
-    # Support both "primary" and "$primary" (legacy/QSS format)
     name = name.lstrip("$")
-    
-    # Try derived tokens first (alphas etc.)
-    hex_color = _active_tokens.get(name)
-    
-    # Only treat as state if it's a valid state name
-    is_state = bool(state) and state in _active_state
+    val = _active_tokens.get(name)
 
-    if hex_color is None:
+    if val is None:
         if name not in _missing_token_cache:
             _missing_token_cache.add(name)
             print(f"[THEME WARN] Missing token: {name!r}", file=sys.stderr)
         return ""
 
-    # No valid state → return base color
-    if not is_state:
-        return hex_color
+    # Don't apply state alpha to font weights or if no state requested
+    if not state or name.startswith("weight-"):
+        return val
 
-    # Apply state alpha → #AARRGGBB
-    alpha = _active_state[state]
-    c = QColor(hex_color)
+    # Apply state alpha only if valid color
+    c = QColor(val)
+    if not c.isValid():
+        return val
+
+    alpha = _active_state.get(state, 1.0)
     aa = round(alpha * 255)
     return f"#{aa:02x}{c.red():02x}{c.green():02x}{c.blue():02x}"
 
@@ -239,9 +226,21 @@ def _derive_compat_tokens(raw: dict[str, str], state: dict[str, float]) -> dict[
     text_on_primary = "#ffffff" if lum < 0.5 else "#000000"
 
     # Add derived state tokens (alphas) and specialized UI identifiers
+    from gui.components.outputs.helper_functions.lcc_colors import COLORS as LCC
     tokens.update({
         "primary-hover":       _alpha("primary", "hover"),
         "primary-active":      _alpha("primary", "pressed"),
+        "border":              raw.get("text_disabled", ""),
+        "border-subtle":       raw.get("surface_mid", ""),
+        
+        # Chart / Pillar colors
+        "eco":                 LCC.get("eco_color", "#9e9eff"),
+        "env":                 LCC.get("env_color", "#8ad400"),
+        "soc":                 LCC.get("soc_color", "#ff5a2a"),
+        "init":                LCC.get("init_color", "#CCCCCC"),
+        "use":                 LCC.get("use_color", "#00C49A"),
+        "end":                 LCC.get("end_color", "#EA9E9E"),
+
         "danger-bg":           _alpha("danger",  "hover"),
         "danger-bg-pressed":   _alpha("danger",  "pressed"),
         "sidebar-hover":       _alpha("primary", "hover"),

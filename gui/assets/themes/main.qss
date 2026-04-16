@@ -9,7 +9,8 @@
    $window          app / sidebar background
    $text            primary text
    $text_secondary  muted / secondary text
-   $surface_mid     standard border
+   $border          standard border (visible)
+   $border-subtle   subtle divider / gridline
    $text_disabled   disabled / placeholder
    $surface         neutral hover background
    $surface_pressed neutral pressed background
@@ -18,7 +19,6 @@
 /* ── Base ───────────────────────────────────────────────────────────────── */
 * {
     font-family: "Ubuntu", Arial, sans-serif;
-    font-size: 13px;
     color: $text;
     outline: none;
 }
@@ -27,12 +27,17 @@ QWidget {
     background-color: $window;
 }
 
+QLabel {
+    line-height: 1.6;
+    background-color: transparent;
+}
+
 /* ── Form controls - inputs ─────────────────────────────────────────────── */
 QLineEdit,
 QTextEdit,
 QPlainTextEdit {
     background-color: $base;
-    border: 1px solid $surface_mid;
+    border: 1px solid $border;
     border-radius: 8px;
     padding: 6px 12px;
     min-height: 36px;
@@ -43,7 +48,7 @@ QPlainTextEdit {
 
 QLineEdit:hover,
 QTextEdit:hover {
-    border-color: $surface_mid;
+    border-color: $border;
 }
 
 QLineEdit:focus,
@@ -64,14 +69,14 @@ QTextEdit:disabled,
 QPlainTextEdit:disabled {
     background-color: $window;
     color: $text_disabled;
-    border-color: $surface_mid;
+    border-color: $border;
 }
 
 /* ── Form controls - spin boxes ─────────────────────────────────────────── */
 QSpinBox,
 QDoubleSpinBox {
     background-color: $base;
-    border: 1px solid $surface_mid;
+    border: 1px solid $border;
     border-radius: 8px;
     padding: 6px 12px;
     min-height: 36px;
@@ -80,7 +85,7 @@ QDoubleSpinBox {
 
 QSpinBox:hover,
 QDoubleSpinBox:hover {
-    border-color: $surface_mid;
+    border-color: $border;
 }
 
 QSpinBox:focus,
@@ -93,7 +98,7 @@ QSpinBox:disabled,
 QDoubleSpinBox:disabled {
     background-color: $window;
     color: $text_disabled;
-    border-color: $surface_mid;
+    border-color: $border;
 }
 
 QSpinBox[validationState="error"],
@@ -230,7 +235,7 @@ TableLineEdit:disabled {
 /* ── Form controls - combo box ──────────────────────────────────────────── */
 QComboBox {
     background-color: $base;
-    border: 1px solid $surface_mid;
+    border: 1px solid $border;
     border-radius: 8px;
     padding: 6px 36px 6px 12px;
     min-height: 36px;
@@ -239,7 +244,7 @@ QComboBox {
 }
 
 QComboBox:hover {
-    border-color: $surface_mid;
+    border-color: $border;
 }
 
 QComboBox:focus {
@@ -250,7 +255,7 @@ QComboBox:focus {
 QComboBox:disabled {
     background-color: $window;
     color: $text_disabled;
-    border-color: $surface_mid;
+    border-color: $border;
 }
 
 QComboBox[validationState="error"] {
@@ -323,13 +328,13 @@ QCheckBox {
 QCheckBox::indicator {
     width: 16px;
     height: 16px;
-    border: 1px solid $surface_mid;
+    border: 1px solid $border;
     border-radius: 4px;
     background-color: $base;
 }
 
 QCheckBox::indicator:hover {
-    border-color: $surface_mid;
+    border-color: $border;
 }
 
 QCheckBox::indicator:checked {
@@ -344,7 +349,7 @@ QCheckBox::indicator:checked:hover {
 
 QCheckBox::indicator:disabled {
     background-color: $window;
-    border-color: $surface_mid;
+    border-color: $border;
 }
 
 QCheckBox:disabled {
@@ -360,13 +365,13 @@ QRadioButton {
 QRadioButton::indicator {
     width: 16px;
     height: 16px;
-    border: 1px solid $surface_mid;
+    border: 1px solid $border;
     border-radius: 8px;
     background-color: $base;
 }
 
 QRadioButton::indicator:hover {
-    border-color: $surface_mid;
+    border-color: $border;
 }
 
 QRadioButton::indicator:checked {
@@ -381,7 +386,7 @@ QRadioButton::indicator:checked:hover {
 
 QRadioButton::indicator:disabled {
     background-color: $window;
-    border-color: $surface_mid;
+    border-color: $border;
 }
 
 QRadioButton:disabled {
@@ -391,7 +396,7 @@ QRadioButton:disabled {
 /* ── Buttons ────────────────────────────────────────────────────────────── */
 QPushButton {
     background-color: $base;
-    border: 1px solid $surface_mid;
+    border: 1px solid $border;
     border-radius: 8px;
     padding: 6px 16px;
     min-height: 36px;
@@ -401,7 +406,7 @@ QPushButton {
 
 QPushButton:hover {
     background-color: $surface;
-    border-color: $surface_mid;
+    border-color: $border;
     color: $text;
 }
 
@@ -433,14 +438,14 @@ QPushButton:default:pressed {
 QPushButton:disabled {
     background-color: $window;
     color: $text_disabled;
-    border-color: $surface_mid;
+    border-color: $border;
 }
 
 /* ── Tab bar ────────────────────────────────────────────────────────────── */
 QTabWidget::pane {
     background-color: $base;
     border: none;
-    border-top: 1px solid $surface_mid;
+    border-top: 1px solid $border-subtle;
 }
 
 QTabBar {
@@ -485,8 +490,8 @@ QTreeView::branch {
 QTableView {
     background-color: $base;
     alternate-background-color: $window;
-    gridline-color: $surface_mid;
-    border: 1px solid $surface_mid;
+    gridline-color: $border-subtle;
+    border: 1px solid $border;
     border-radius: 8px;
 }
 
@@ -533,8 +538,8 @@ QHeaderView::section {
     background-color: $surface;
     color: $text;
     border: none;
-    border-bottom: 2px solid $surface_mid;
-    border-right: 1px solid $surface_mid;
+    border-bottom: 2px solid $border-subtle;
+    border-right: 1px solid $border-subtle;
     padding: 8px 12px;
     font-weight: $weight-semibold;
     font-size: 11px;
@@ -547,8 +552,8 @@ QHeaderView::section:last {
 QTableView QTableCornerButton::section {
     background-color: $window;
     border: none;
-    border-bottom: 2px solid $surface_mid;
-    border-right: 1px solid $surface_mid;
+    border-bottom: 2px solid $border-subtle;
+    border-right: 1px solid $border-subtle;
 }
 
 /* ── Scrollbar ──────────────────────────────────────────────────────────── */
@@ -566,7 +571,7 @@ QScrollBar:horizontal {
 }
 
 QScrollBar::handle {
-    background-color: $surface_mid;
+    background-color: $border-subtle;
     border-radius: 4px;
 }
 
@@ -617,7 +622,7 @@ QMenuBar::item:selected {
 /* ── Dropdown menu ──────────────────────────────────────────────────────── */
 QMenu {
     background-color: $base;
-    border: 1px solid $surface_mid;
+    border: 1px solid $border;
     border-radius: 10px;
     padding: 8px;
 }
@@ -636,14 +641,14 @@ QMenu::item:selected {
 
 QMenu::separator {
     height: 1px;
-    background: $surface_mid;
+    background: $border-subtle;
     margin: 6px 8px;
 }
 
 /* ── Status bar ─────────────────────────────────────────────────────────── */
 QStatusBar {
     background-color: $window;
-    border-top: 1px solid $surface_mid;
+    border-top: 1px solid $border-subtle;
     color: $text_secondary;
     font-size: 12px;
 }
@@ -661,7 +666,7 @@ QToolTip {
 /* ── Top bar ────────────────────────────────────────────────────────────── */
 #top_bar {
     background-color: $base;
-    border-bottom: 1px solid $surface_mid;
+    border-bottom: 1px solid $border-subtle;
 }
 #top_bar QPushButton {
     padding: 2px 8px;

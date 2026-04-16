@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QTableView,
 )
 from PySide6.QtCore import QObject, QEvent, Qt, QTimer, QCoreApplication
-from PySide6.QtGui import QFontDatabase, QIcon
+from PySide6.QtGui import QFont, QFontDatabase, QIcon
 
 # Custom UI Components and Managers
 from gui.components.splash_screen import SplashScreen
@@ -148,6 +148,12 @@ def main():
             "Ubuntu-BoldItalic.ttf",
         ]:
             QFontDatabase.addApplicationFont(os.path.join(_font_dir, _ttf))
+
+    # Set app-level default font — body size, normal weight.
+    # With font-size removed from the global QSS * rule, this becomes the
+    # fallback for any widget that does not call setFont() explicitly.
+    # Widgets that do call setFont(_f(...)) will use their own size correctly.
+    app.setFont(QFont("Ubuntu", 9))
 
     # Load Custom Units (deferred to start of event loop)
     def _load_custom_units():

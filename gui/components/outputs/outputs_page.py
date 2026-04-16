@@ -23,16 +23,45 @@ from PySide6.QtCore import Qt, QObject, QSize, QThread, QTimer, Signal
 from gui.themes import get_token, theme_manager
 from gui.styles import font as _f, btn_primary, btn_ghost
 from gui.theme import (
-    SP1, SP2, SP3, SP4, SP5, SP6, SP8,
-    RADIUS_MD, RADIUS_LG, RADIUS_XL,
-    FS_XS, FS_SM, FS_BASE, FS_MD, FS_LG, FS_XL, FS_DISP, FS_DISP_LG, FS_DISP_XL,
-    FW_NORMAL, FW_MEDIUM, FW_SEMIBOLD, FW_BOLD,
-    BTN_MD, BTN_LG, FONT_FAMILY,
+    SP1,
+    SP2,
+    SP3,
+    SP4,
+    SP5,
+    SP6,
+    SP8,
+    RADIUS_MD,
+    RADIUS_LG,
+    RADIUS_XL,
+    FS_XS,
+    FS_SM,
+    FS_BASE,
+    FS_MD,
+    FS_LG,
+    FS_SUBHEAD,
+    FS_XL,
+    FS_DISP,
+    FS_DISP_LG,
+    FS_DISP_XL,
+    FW_NORMAL,
+    FW_MEDIUM,
+    FW_SEMIBOLD,
+    FW_BOLD,
+    BTN_MD,
+    BTN_LG,
+    FONT_FAMILY,
 )
 from gui.components.base_widget import ScrollableForm
-from gui.components.utils.form_builder.form_definitions import FieldDef, ValidationStatus
+from gui.components.utils.form_builder.form_definitions import (
+    FieldDef,
+    ValidationStatus,
+)
 from gui.components.utils.form_builder.form_builder import build_form
-from gui.components.utils.validation_helpers import clear_field_styles, freeze_form, validate_form
+from gui.components.utils.validation_helpers import (
+    clear_field_styles,
+    freeze_form,
+    validate_form,
+)
 from three_ps_lcca_core.core.main import run_full_lcc_analysis
 
 from gui.components.utils.display_format import fmt_currency
@@ -44,7 +73,7 @@ from .data_preparer import DataPreparer
 from .report_section_dialog import ReportSectionDialog
 
 
-CHUNK    = "outputs_data"
+CHUNK = "outputs_data"
 CHUNK_AP = "analysis_period"
 
 OUTPUTS_FIELDS = [
@@ -77,6 +106,7 @@ _log = logging.getLogger(__name__)
 # Helpers
 # ──────────────────────────────────────────────────────────────
 
+
 def _divider() -> QFrame:
     """Full-width horizontal rule used between dashboard sections."""
     line = QFrame()
@@ -89,35 +119,22 @@ def _divider() -> QFrame:
     return line
 
 
-def _section_heading(title: str) -> QWidget:
-    container = QWidget()
-    h = QHBoxLayout(container)
-    h.setContentsMargins(0, SP6, 0, SP3)
-    h.setSpacing(SP4)
-
-    bar = QFrame()
-    bar.setFixedWidth(5)
-    bar.setMinimumHeight(32)
-    bar.setStyleSheet(
-        f"background-color: {get_token('primary')}; border-radius: 2.5px;"
-    )
-    h.addWidget(bar, 0, Qt.AlignVCenter)
-
+def _section_heading(title: str) -> QLabel:
     lbl = QLabel(title)
     lbl.setWordWrap(True)
-    lbl.setFont(_f(FS_DISP_LG, FW_BOLD))
-    lbl.setStyleSheet(f"color: {get_token('text')}; letter-spacing: 0.5px; font-size: 24px;")
-    h.addWidget(lbl, 1)
-    return container
+    lbl.setContentsMargins(0, SP6, 0, SP3)
+    lbl.setFont(_f(FS_SUBHEAD, FW_BOLD))
+    lbl.setStyleSheet(f"color: {get_token('text')}; letter-spacing: 0.5px;")
+    return lbl
 
 
 def _section_description(text: str) -> QLabel:
     lbl = QLabel(text)
     lbl.setWordWrap(True)
-    lbl.setFont(_f(FS_MD))
+    lbl.setFont(_f(FS_BASE))
     lbl.setStyleSheet(
         f"color: {get_token('text_secondary')}; "
-        f"margin-bottom: {SP4}px; line-height: 1.5;"
+        f"margin-bottom: {SP4}px;"
     )
     return lbl
 
@@ -183,12 +200,13 @@ def _make_issue_card(page_name: str, issues: list, icon: str, navigate_cb) -> QG
 # Background worker
 # ──────────────────────────────────────────────────────────────
 
+
 class _LCCAWorker(QObject):
     """Runs the full LCC analysis on a background thread."""
 
     # (results, all_data, lcc_breakdown)
     finished = Signal(object, object, object)
-    errored  = Signal(object, str)
+    errored = Signal(object, str)
 
     def __init__(self, all_data: dict, analysis_period_years: int):
         super().__init__()
@@ -197,7 +215,7 @@ class _LCCAWorker(QObject):
 
     def run(self):
         try:
-            all_data   = self._all_data
+            all_data = self._all_data
             is_global, data_object = DataPreparer.prepare_data_object(
                 all_data, self._analysis_period_years
             )
@@ -208,7 +226,7 @@ class _LCCAWorker(QObject):
             results = run_full_lcc_analysis(
                 data_object, lcc_breakdown, wpi=wpi_metadata, debug=True
             )
-            print(results)
+            # print(results)
             self.finished.emit(results, all_data, lcc_breakdown)
         except Exception as exc:
             self.errored.emit(exc, traceback.format_exc())
@@ -218,14 +236,15 @@ class _LCCAWorker(QObject):
 # Summary cards
 # ──────────────────────────────────────────────────────────────
 
+
 class LCCSummaryCards(QWidget):
     """Three top-line KPI cards: Total LCCA, Initial Investment, Future Liabilities."""
 
     def __init__(self, results: dict, currency: str = "INR", parent=None):
         super().__init__(parent)
-        self._results  = results
+        self._results = results
         self._currency = currency
-        self._cards    = []
+        self._cards = []
         self._setup_ui()
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
@@ -234,34 +253,33 @@ class LCCSummaryCards(QWidget):
         self._grid.setContentsMargins(0, SP3, 0, SP5)
         self._grid.setSpacing(SP4)
 
-        summary   = compute_all_summaries(self._results)
+        summary = compute_all_summaries(self._results)
         stagewise = summary.get("stagewise", {})
 
         total_lcca = sum(stagewise.values())
-        initial    = stagewise.get("initial", 0)
-        future     = (
-            stagewise.get("use_reconstruction", 0)
-            + stagewise.get("end_of_life", 0)
+        initial = stagewise.get("initial", 0)
+        future = stagewise.get("use_reconstruction", 0) + stagewise.get(
+            "end_of_life", 0
         )
 
         cards_data = [
             (
-                "Total Life Cycle Cost (NPV)",
+                "Total Life cycle cost (year)",
                 total_lcca,
                 get_token("primary"),
-                "Cumulative value of every cost the project will incur over its entire life, in today's money.",
+                "A Comprehensive Analysis of Total Life-Cycle Expenditures evaluated at the assessment year.",
             ),
             (
-                "Initial Stage Total",
+                "Initial Cost",
                 initial,
                 get_token("success"),
-                "Sum of construction, financing, social, and environmental costs during the initial phase.",
+                "Cumulative total of construction, economic, social, and environmental costs incurred during the initial phase.",
             ),
             (
-                "Future Stages Total",
+                "Future Cost",
                 future,
                 get_token("warning"),
-                "Sum of all costs expected for maintenance, mid-life repairs, and eventual removal.",
+                "Cumulative cost expected for maintenance, repairs, replacement and demolition.",
             ),
         ]
 
@@ -287,13 +305,15 @@ class LCCSummaryCards(QWidget):
             for i, card in enumerate(self._cards):
                 self._grid.addWidget(card, 0, i)
 
-    def _create_card(self, title: str, value: float, color_hex: str, subtitle: str) -> QFrame:
+    def _create_card(
+        self, title: str, value: float, color_hex: str, subtitle: str
+    ) -> QFrame:
         card = QFrame()
+        card.setObjectName("kpiCard")
         card.setStyleSheet(
-            f"QFrame {{"
-            f"  background-color: {get_token('surface_low')};"
+            f"#kpiCard {{"
+            f"  background-color: {get_token('surface')};"
             f"  border: 1px solid {get_token('surface_mid')};"
-            f"  border-top: 3px solid {color_hex};"
             f"  border-radius: {RADIUS_LG}px;"
             f"}}"
         )
@@ -305,13 +325,9 @@ class LCCSummaryCards(QWidget):
         # Title
         title_lbl = QLabel(title.upper())
         title_lbl.setWordWrap(True)
+        title_lbl.setFont(_f(FS_SM, FW_BOLD))
         title_lbl.setStyleSheet(
-            f"color: {get_token('text')};"
-            f"font-family: {FONT_FAMILY};"
-            f"font-size: {FS_LG}pt;"
-            f"font-weight: {FW_BOLD};"
-            f"letter-spacing: 1.5px;"
-            f"border: none;"
+            f"color: {get_token('text_secondary')}; letter-spacing: 1.5px; border: none;"
         )
 
         v.addWidget(title_lbl)
@@ -325,24 +341,17 @@ class LCCSummaryCards(QWidget):
         rl.setSpacing(SP1)
 
         curr_lbl = QLabel(self._currency)
+        curr_lbl.setFont(_f(FS_XS, FW_NORMAL))
         curr_lbl.setStyleSheet(
-            f"color: {get_token('text_secondary')};"
-            f"font-family: {FONT_FAMILY};"
-            f"font-size: {FS_SM}pt;"
-            f"font-weight: {FW_NORMAL};"
-            f"margin-bottom: {SP2}px;"
+            f"color: {get_token('text_secondary')}; margin-bottom: {SP2}px;"
         )
         rl.addWidget(curr_lbl, 0, Qt.AlignBottom)
 
         val_str = fmt_currency(value, self._currency, decimals=0)
         val_lbl = QLabel(val_str)
         val_lbl.setWordWrap(True)
-        val_lbl.setStyleSheet(
-            f"color: {color_hex};"
-            f"font-family: {FONT_FAMILY};"
-            f"font-size: {FS_DISP_LG}pt;"
-            f"font-weight: {FW_BOLD};"
-        )
+        val_lbl.setFont(_f(FS_DISP_LG, FW_BOLD))
+        val_lbl.setStyleSheet(f"color: {color_hex};")
         rl.addWidget(val_lbl, 1, Qt.AlignBottom)
 
         v.addWidget(val_row)
@@ -351,12 +360,9 @@ class LCCSummaryCards(QWidget):
         # Subtitle
         sub_lbl = QLabel(subtitle)
         sub_lbl.setWordWrap(True)
+        sub_lbl.setFont(_f(FS_XS, FW_NORMAL))
         sub_lbl.setStyleSheet(
-            f"color: {get_token('text_secondary')};"
-            f"font-family: {FONT_FAMILY};"
-            f"font-size: {FS_XS}pt;"
-            f"font-weight: {FW_NORMAL};"
-            f"border: none;"
+            f"color: {get_token('text_secondary')}; border: none;"
         )
         v.addWidget(sub_lbl)
 
@@ -367,11 +373,17 @@ class LCCSummaryCards(QWidget):
 # Report intro
 # ──────────────────────────────────────────────────────────────
 
+
 class LCCIntroWidget(QWidget):
     """One-paragraph context block shown at the top of every results report."""
 
-    def __init__(self, results: dict, analysis_period: int = 0,
-                 currency: str = "INR", parent=None):
+    def __init__(
+        self,
+        results: dict,
+        analysis_period: int = 0,
+        currency: str = "INR",
+        parent=None,
+    ):
         super().__init__(parent)
         self._build(results, analysis_period, currency)
 
@@ -389,16 +401,6 @@ class LCCIntroWidget(QWidget):
 
         ap_str = f"{analysis_period}-year" if analysis_period else "full"
 
-        body = (
-            f"This report evaluates the {ap_str} Life Cycle Cost Analysis (LCCA) of the bridge project. "
-            f"Instead of looking only at the construction budget, LCCA accounts for every expense the bridge "
-            f"will incur over its entire life—including maintenance, carbon footprint, and time lost by road users. "
-            f"All future costs are converted to <b>Net Present Value (NPV)</b>, which shows the amount of money "
-            f"needed today to cover those future costs. This allows for a fair 'apples-to-apples' comparison "
-            f"of all expenses across the project's lifespan.<br><br>"
-            f"<b>Stages Included:</b> {stage_str}<br>"
-            f"<b>Reporting Currency:</b> {currency}"
-        )
 
         frame = QFrame(self)
         frame.setStyleSheet(
@@ -413,7 +415,7 @@ class LCCIntroWidget(QWidget):
         fl.setSpacing(SP2)
 
         title = QLabel("About This Report")
-        title.setFont(_f(FS_MD, FW_BOLD))
+        title.setFont(_f(FS_LG, FW_BOLD))
         title.setStyleSheet(f"color: {get_token('text')}; border: none;")
         fl.addWidget(title)
 
@@ -436,6 +438,7 @@ class LCCIntroWidget(QWidget):
 # Key findings / smart insights
 # ──────────────────────────────────────────────────────────────
 
+
 class LCCInsightsWidget(QWidget):
     """Auto-generated key findings computed directly from LCCA results."""
 
@@ -453,13 +456,7 @@ class LCCInsightsWidget(QWidget):
 
         for icon, color_token, html in findings:
             row_frame = QFrame()
-            row_frame.setStyleSheet(
-                f"QFrame {{"
-                f"  background: transparent;"
-                f"  border: none;"
-                f"  border-left: 3px solid {get_token(color_token)};"
-                f"}}"
-            )
+            row_frame.setStyleSheet("QFrame { background: transparent; border: none; }")
             row_h = QHBoxLayout(row_frame)
             row_h.setContentsMargins(SP4, SP2, SP3, SP2)
             row_h.setSpacing(SP3)
@@ -494,85 +491,103 @@ class LCCInsightsWidget(QWidget):
 
         # pillar totals
         eco_total = sum(
-            sum(r.get(s, {}).get("economic", {}).values())
-            for s in all_stages
+            sum(r.get(s, {}).get("economic", {}).values()) for s in all_stages
         )
         env_total = sum(
-            sum(r.get(s, {}).get("environmental", {}).values())
-            for s in all_stages
+            sum(r.get(s, {}).get("environmental", {}).values()) for s in all_stages
         )
         soc_total = sum(
-            sum(r.get(s, {}).get("social", {}).values())
-            for s in all_stages
+            sum(r.get(s, {}).get("social", {}).values()) for s in all_stages
         )
 
         # ── 1. Dominant stage ──────────────────────────────────
         stage_labels = {
-            "initial_stage":  "Initial Construction",
-            "use_stage":      "Use & Maintenance",
+            "initial_stage": "Initial Construction",
+            "use_stage": "Use & Maintenance",
             "reconstruction": "Reconstruction",
-            "end_of_life":    "End-of-Life",
+            "end_of_life": "End-of-Life",
         }
         dominant = max(stage_totals_raw, key=stage_totals_raw.get)
         dom_pct = stage_totals_raw[dominant] / grand * 100
         dom_val = fmt_currency(stage_totals_raw[dominant], c, decimals=0)
-        findings.append((
-            "●", "primary",
-            f"<b>{stage_labels[dominant]}</b> is the largest cost stage at "
-            f"<b>{dom_pct:.0f}%</b> of total lifecycle cost ({c} {dom_val})."
-        ))
+        findings.append(
+            (
+                "●",
+                "primary",
+                f"<b>{stage_labels[dominant]}</b> is the largest cost stage at "
+                f"<b>{dom_pct:.0f}%</b> of total lifecycle cost ({c} {dom_val}).",
+            )
+        )
 
         # ── 2. Social burden ───────────────────────────────────
         soc_pct = soc_total / grand * 100
         eco_pct = eco_total / grand * 100
-        findings.append((
-            "●", "warning",
-            f"Road users carry <b>{soc_pct:.0f}%</b> of the total life cycle cost through traffic delays "
-            f"and detours. This 'Social Cost' is often hidden from traditional budgets, which "
-            f"primarily focus on the owner's direct spending (currently <b>{eco_pct:.0f}%</b>)."
-        ))
+        findings.append(
+            (
+                "●",
+                "warning",
+                f"Road users carry <b>{soc_pct:.0f}%</b> of the total life cycle cost through traffic delays "
+                f"and detours. This 'Social Cost' is often hidden from traditional budgets, which "
+                f"primarily focus on the owner's direct spending (currently <b>{eco_pct:.0f}%</b>).",
+            )
+        )
 
         # ── 3. RUC vs construction ─────────────────────────────
         construction = _get("initial_stage", "economic", "initial_construction_cost")
-        ruc_init     = _get("initial_stage", "social",   "initial_road_user_cost")
+        ruc_init = _get("initial_stage", "social", "initial_road_user_cost")
         if construction > 0 and ruc_init > 0:
             ratio = ruc_init / construction
-            findings.append((
-                "●", "danger",
-                f"Building this bridge costs road users <b>{c} {fmt_currency(ruc_init, c, decimals=0)}</b> "
-                f"in delays—that is <b>{ratio:.1f}× the construction contract value</b> "
-                f"({c} {fmt_currency(construction, c, decimals=0)}). Faster construction directly reduces this social burden."
-            ))
+            findings.append(
+                (
+                    "●",
+                    "danger",
+                    f"Building this bridge costs road users <b>{c} {fmt_currency(ruc_init, c, decimals=0)}</b> "
+                    f"in delays—that is <b>{ratio:.1f}× the construction contract value</b> "
+                    f"({c} {fmt_currency(construction, c, decimals=0)}). Faster construction directly reduces this social burden.",
+                )
+            )
 
         # ── 4. Bearing & expansion joint ──────────────────────
-        bej = _get("use_stage", "economic", "replacement_costs_for_bearing_and_expansion_joint")
+        bej = _get(
+            "use_stage", "economic", "replacement_costs_for_bearing_and_expansion_joint"
+        )
         use_eco = sum(r.get("use_stage", {}).get("economic", {}).values()) or 1.0
         if bej > 0:
             bej_pct = bej / use_eco * 100
-            findings.append((
-                "●", "text",
-                f"Bearing & expansion joint replacements account for <b>{bej_pct:.0f}%</b> of all "
-                f"maintenance expenditure ({c} {fmt_currency(bej, c, decimals=0)}). "
-                f"This is the single largest recurring maintenance cost item."
-            ))
+            findings.append(
+                (
+                    "●",
+                    "text",
+                    f"Bearing & expansion joint replacements account for <b>{bej_pct:.0f}%</b> of all "
+                    f"maintenance expenditure ({c} {fmt_currency(bej, c, decimals=0)}). "
+                    f"This is the single largest recurring maintenance cost item.",
+                )
+            )
 
         # ── 5. Reconstruction disruption vs EOL ───────────────
         recon_soc = sum(r.get("reconstruction", {}).get("social", {}).values())
-        eol_soc   = sum(r.get("end_of_life",    {}).get("social", {}).values())
+        eol_soc = sum(r.get("end_of_life", {}).get("social", {}).values())
         if recon_soc > 0 and eol_soc > 0:
             rd_ratio = recon_soc / eol_soc
-            findings.append((
-                "●", "warning",
-                f"Mid-life reconstruction disrupts road users <b>{rd_ratio:.1f}× more</b> than "
-                f"final end-of-life demolition ({c} {fmt_currency(recon_soc, c, decimals=0)} vs "
-                f"{c} {fmt_currency(eol_soc, c, decimals=0)}). Minimising reconstruction frequency "
-                f"has an outsized social benefit."
-            ))
+            findings.append(
+                (
+                    "●",
+                    "warning",
+                    f"Mid-life reconstruction disrupts road users <b>{rd_ratio:.1f}× more</b> than "
+                    f"final end-of-life demolition ({c} {fmt_currency(recon_soc, c, decimals=0)} vs "
+                    f"{c} {fmt_currency(eol_soc, c, decimals=0)}). Minimising reconstruction frequency "
+                    f"has an outsized social benefit.",
+                )
+            )
 
         # ── 6. Carbon footprint ────────────────────────────────
         env_pct = env_total / grand * 100
-        mat_c = _get("initial_stage", "environmental", "initial_material_carbon_emission_cost")
-        veh_c = _get("initial_stage", "environmental", "initial_vehicular_emission_cost")
+        mat_c = _get(
+            "initial_stage", "environmental", "initial_material_carbon_emission_cost"
+        )
+        veh_c = _get(
+            "initial_stage", "environmental", "initial_vehicular_emission_cost"
+        )
         carbon_note = ""
         if mat_c > 0 and veh_c > 0:
             mc_ratio = mat_c / veh_c
@@ -580,33 +595,42 @@ class LCCInsightsWidget(QWidget):
                 f" The environmental impact of construction materials is "
                 f"<b>{mc_ratio:.0f}× higher</b> than the impact of vehicle detours during construction."
             )
-        findings.append((
-            "●", "success",
-            f"Environmental (carbon) costs represent <b>{env_pct:.1f}%</b> of the total project "
-            f"impact. While smaller than economic costs, they represent the project's direct "
-            f"contribution to climate change.{carbon_note}"
-        ))
+        findings.append(
+            (
+                "●",
+                "success",
+                f"Environmental (carbon) costs represent <b>{env_pct:.1f}%</b> of the total project "
+                f"impact. While smaller than economic costs, they represent the project's direct "
+                f"contribution to climate change.{carbon_note}",
+            )
+        )
 
         # ── 7. Scrap / residual value ──────────────────────────
         scrap_recon = _get("reconstruction", "economic", "total_scrap_value")
-        scrap_eol   = _get("end_of_life",    "economic", "total_scrap_value")
+        scrap_eol = _get("end_of_life", "economic", "total_scrap_value")
         if scrap_recon == 0 and scrap_eol == 0:
-            findings.append((
-                "●", "text",
-                "No residual or scrap value is recovered at reconstruction or end-of-life. "
-                "Designing for material recovery (steel, aggregate) could offset demolition costs."
-            ))
+            findings.append(
+                (
+                    "●",
+                    "text",
+                    "No residual or scrap value is recovered at reconstruction or end-of-life. "
+                    "Designing for material recovery (steel, aggregate) could offset demolition costs.",
+                )
+            )
 
         # ── 8. Loan / financing cost ───────────────────────────
-        loan_init  = _get("initial_stage",  "economic", "time_cost_of_loan")
+        loan_init = _get("initial_stage", "economic", "time_cost_of_loan")
         loan_recon = _get("reconstruction", "economic", "time_cost_of_loan")
         if loan_init > 0 and construction > 0:
             loan_pct = loan_init / construction * 100
-            findings.append((
-                "●", "text",
-                f"Financing cost over the loan period is <b>{loan_pct:.1f}%</b> of construction value "
-                f"({c} {fmt_currency(loan_init, c, decimals=0)}) — a relatively small component of total cost."
-            ))
+            findings.append(
+                (
+                    "●",
+                    "text",
+                    f"Financing cost over the loan period is <b>{loan_pct:.1f}%</b> of construction value "
+                    f"({c} {fmt_currency(loan_init, c, decimals=0)}) — a relatively small component of total cost.",
+                )
+            )
 
         return findings
 
@@ -618,23 +642,24 @@ class LCCInsightsWidget(QWidget):
 # Main outputs page
 # ──────────────────────────────────────────────────────────────
 
+
 class OutputsPage(ScrollableForm):
-    navigate_requested   = Signal(str)
+    navigate_requested = Signal(str)
     calculation_completed = Signal()
-    validate_requested   = Signal()
+    validate_requested = Signal()
 
     CALC_TIMEOUT_MS = 30_000
 
     def __init__(self, controller=None):
         super().__init__(controller=controller, chunk_name=CHUNK)
-        self._pages         = {}
-        self._has_results   = False
-        self._calc_thread   = None
-        self._calc_worker   = None
+        self._pages = {}
+        self._has_results = False
+        self._calc_thread = None
+        self._calc_worker = None
         self._timeout_timer = None
         self._elapsed_timer = None
-        self._elapsed_secs  = 0
-        self._currency      = "INR"
+        self._elapsed_secs = 0
+        self._currency = "INR"
         self._current_status = "idle"
         self._status_args: dict = {}
         self._build_ui()
@@ -646,9 +671,9 @@ class OutputsPage(ScrollableForm):
         f = self.form
 
         self._header = QLabel("Outputs")
-        self._header.setFont(_f(FS_DISP_XL, FW_BOLD))
+        self._header.setFont(_f(FS_DISP_LG, FW_BOLD))
         self._header.setStyleSheet(
-            f"color: {get_token('primary')}; margin-bottom: {SP2}px; font-size: 32px;"
+            f"color: {get_token('primary')}; margin-bottom: {SP2}px;"
         )
         f.addRow(self._header)
 
@@ -690,7 +715,9 @@ class OutputsPage(ScrollableForm):
         if s == "idle":
             self._show_idle()
         elif s == "issues":
-            self.show_results(self._status_args["errors"], self._status_args["warnings"])
+            self.show_results(
+                self._status_args["errors"], self._status_args["warnings"]
+            )
         elif s == "success":
             self.show_success()
         elif s == "calc_error":
@@ -712,7 +739,11 @@ class OutputsPage(ScrollableForm):
     def _set_inputs_visible(self, visible: bool):
         f = self.form
         for row in range(1, f.rowCount() - 1):
-            for role in (QFormLayout.FieldRole, QFormLayout.SpanningRole, QFormLayout.LabelRole):
+            for role in (
+                QFormLayout.FieldRole,
+                QFormLayout.SpanningRole,
+                QFormLayout.LabelRole,
+            ):
                 item = f.itemAt(row, role)
                 if item and item.widget():
                     item.widget().setVisible(visible)
@@ -720,14 +751,7 @@ class OutputsPage(ScrollableForm):
     def _inline_banner(self, text: str, token: str) -> QFrame:
         """Small status banner with a coloured left-border strip."""
         banner = QFrame()
-        banner.setStyleSheet(
-            f"QFrame {{"
-            f"  background: transparent;"
-            f"  border: none;"
-            f"  border-left: 3px solid {get_token(token)};"
-            f"  border-radius: 0px;"
-            f"}}"
-        )
+        banner.setStyleSheet("QFrame { background: transparent; border: none; }")
         v = QVBoxLayout(banner)
         v.setContentsMargins(SP4, SP2, SP3, SP2)
         lbl = QLabel(text)
@@ -747,11 +771,9 @@ class OutputsPage(ScrollableForm):
             "Set the analysis period above, then press Validate to check all "
             "input pages before running the life-cycle cost calculation."
         )
-        hint.setFont(_f(FS_BASE))
+        hint.setFont(_f(FS_BASE, italic=True))
         hint.setWordWrap(True)
-        hint.setStyleSheet(
-            f"color: {get_token('text_secondary')}; font-style: italic;"
-        )
+        hint.setStyleSheet(f"color: {get_token('text_secondary')};")
         self._status_layout.addWidget(hint)
 
     # ── State: calculating ────────────────────────────────────
@@ -836,7 +858,9 @@ class OutputsPage(ScrollableForm):
         if self._calc_thread and self._calc_thread.isRunning():
             self._calc_thread.terminate()
         self.btn_calculate.setEnabled(True)
-        self._show_calculation_error(TimeoutError("Analysis timed out after 30 seconds."), "")
+        self._show_calculation_error(
+            TimeoutError("Analysis timed out after 30 seconds."), ""
+        )
 
     # ── State: validation issues ──────────────────────────────
 
@@ -848,7 +872,9 @@ class OutputsPage(ScrollableForm):
 
         if all_errors:
             self._status_layout.addWidget(
-                self._inline_banner("🛑  Calculation blocked — fix the errors below", "danger")
+                self._inline_banner(
+                    "🛑  Calculation blocked — fix the errors below", "danger"
+                )
             )
             for page, issues in all_errors.items():
                 self._status_layout.addWidget(
@@ -880,7 +906,10 @@ class OutputsPage(ScrollableForm):
         self._clear_status()
         self._set_inputs_visible(True)
         self._status_layout.addWidget(
-            self._inline_banner("✅  All checks passed — calculation will start automatically", "success")
+            self._inline_banner(
+                "✅  All checks passed — calculation will start automatically",
+                "success",
+            )
         )
         self._status_layout.addStretch()
 
@@ -894,27 +923,25 @@ class OutputsPage(ScrollableForm):
         self._clear_status()
 
         banner = QFrame()
-        banner.setStyleSheet(
-            f"QFrame {{"
-            f"  background: transparent;"
-            f"  border: none;"
-            f"  border-left: 3px solid {get_token('danger')};"
-            f"}}"
-        )
+        banner.setStyleSheet("QFrame { background: transparent; border: none; }")
         v = QVBoxLayout(banner)
         v.setContentsMargins(SP4, SP2, SP3, SP2)
         v.setSpacing(SP1)
 
         title_lbl = QLabel(f"🛑  Analysis Failed: {type(error).__name__}")
-        title_lbl.setFont(_f(FS_BASE, FW_SEMIBOLD))
-        title_lbl.setStyleSheet(f"color: {get_token('danger')}; background: transparent;")
+        title_lbl.setFont(_f(FS_MD, FW_SEMIBOLD))
+        title_lbl.setStyleSheet(
+            f"color: {get_token('danger')}; background: transparent;"
+        )
         v.addWidget(title_lbl)
 
         msg = str(error).splitlines()[0] if str(error) else "An unknown error occurred."
         msg_lbl = QLabel(msg)
         msg_lbl.setFont(_f(FS_BASE))
         msg_lbl.setWordWrap(True)
-        msg_lbl.setStyleSheet(f"color: {get_token('text_secondary')}; background: transparent;")
+        msg_lbl.setStyleSheet(
+            f"color: {get_token('text_secondary')}; background: transparent;"
+        )
         v.addWidget(msg_lbl)
 
         self._status_layout.addWidget(banner)
@@ -931,25 +958,19 @@ class OutputsPage(ScrollableForm):
 
         # Success banner + PDF export
         banner = QFrame()
-        banner.setStyleSheet(
-            f"QFrame {{"
-            f"  background: transparent;"
-            f"  border: none;"
-            f"  border-left: 3px solid {get_token('success')};"
-            f"}}"
-        )
+        banner.setStyleSheet("QFrame { background: transparent; border: none; }")
         bv = QVBoxLayout(banner)
         bv.setContentsMargins(SP4, SP2, SP3, SP2)
         bv.setSpacing(SP3)
 
         ok_lbl = QLabel("✅  Analysis completed successfully")
-        ok_lbl.setFont(_f(FS_BASE, FW_MEDIUM))
+        ok_lbl.setFont(_f(FS_MD, FW_MEDIUM))
         ok_lbl.setStyleSheet(f"color: {get_token('success')}; background: transparent;")
         bv.addWidget(ok_lbl)
 
         pdf_btn = QPushButton("📄  Generate PDF Report")
         pdf_btn.setFixedHeight(BTN_MD)
-        pdf_btn.setFont(_f(FS_SM, FW_MEDIUM))
+        pdf_btn.setFont(_f(FS_BASE, FW_MEDIUM))
         pdf_btn.setStyleSheet(btn_primary())
         pdf_btn.clicked.connect(self._generate_pdf_report)
         bv.addWidget(pdf_btn, 0, Qt.AlignLeft)
@@ -963,35 +984,26 @@ class OutputsPage(ScrollableForm):
             # ── Top-level results ──
             lambda r: _section_heading("At a Glance"),
             lambda r: LCCSummaryCards(r, currency=self._currency),
-
             # ── High-level charts ──
             lambda r: _divider(),
-            lambda r: _section_heading("Sustainability & Lifecycle Distribution"),
+            lambda r: _section_heading("Life cycle cost distribution"),
             lambda r: _section_description(
-                "These charts show how the project's costs are distributed. The Sustainability Matrix "
-                "breaks costs down into Economic, Environmental, and Social pillars. The Aggregation "
-                "chart compares the weight of Initial construction, the combined Use/Maintenance/Reconstruction stage, "
-                "and the final End-of-Life phase."
+                "These charts illustrate the distribution of project costs. The Sustainability Matrix disaggregates costs across the Economic, Environmental, and Social Pillars. The aggregation chart compares the relative weight of three lifecycle phases: Initial Construction, the combined Use/Maintenance/Reconstruction stage, and the final End-of-Life phase."
             ),
             lambda r: LCCPieWidget(r, currency=self._currency),
             lambda r: AggregateChartWidget(r, currency=self._currency),
-
             # ── Stage summary by pillar ──
             lambda r: _divider(),
-            lambda r: _section_heading("Holistic Stage Summary"),
+            lambda r: _section_heading("Consolidated stage summary"),
             lambda r: _section_description(
-                "A consolidated view of costs across the three pillars for each lifecycle stage. "
-                "This table helps identify which phases carry the heaviest social or environmental burden."
+                "A consolidated presentation of costs across the three pillars (economic, social, and environmental) for each lifecycle stage. This table facilitates the identification of phases that bear the most substantial burden."
             ),
             lambda r: LCCDetailsTable(r, currency=self._currency),
-
             # ── Granular cost breakdown ──
             lambda r: _divider(),
-            lambda r: _section_heading("Granular Cost Item Detail"),
+            lambda r: _section_heading("Itemized detail"),
             lambda r: _section_description(
-                "A detailed list of every individual cost component. All values are discounted "
-                "to Net Present Value (NPV), meaning they represent the amount of money needed today "
-                "to cover those future expenses."
+                "An itemised schedule of each individual cost component. All values are discounted to the year of assessment, thus representing the present sum of money required to meet future expenditures."
             ),
             lambda r: LCCBreakdownTable(r, currency=self._currency),
         ]
@@ -1005,10 +1017,13 @@ class OutputsPage(ScrollableForm):
             widget = factory(self._pending_results)
             if widget:
                 # Insert before the implicit stretch at the end
-                self._status_layout.insertWidget(self._status_layout.count() - 1, widget)
+                self._status_layout.insertWidget(
+                    self._status_layout.count() - 1, widget
+                )
         except Exception as e:
             err = QLabel(f"Render error: {e}")
-            err.setStyleSheet(f"color: {get_token('text_secondary')}; font-style: italic;")
+            err.setFont(_f(FS_BASE, italic=True))
+            err.setStyleSheet(f"color: {get_token('text_secondary')};")
             self._status_layout.insertWidget(self._status_layout.count() - 1, err)
         QTimer.singleShot(0, self._build_next_result_widget)
 
@@ -1024,7 +1039,7 @@ class OutputsPage(ScrollableForm):
     # ── Validation & calculation ──────────────────────────────
 
     def run_validation(self):
-        all_errors   = {}
+        all_errors = {}
         all_warnings = {}
         ap = self.analysis_period.value()
 
@@ -1032,7 +1047,9 @@ class OutputsPage(ScrollableForm):
             self.analysis_period.setStyleSheet(
                 f"border: 1.5px solid {get_token('danger')};"
             )
-            all_errors["Analysis Period"] = ["Required field must be greater than zero."]
+            all_errors["Analysis Period"] = [
+                "Required field must be greater than zero."
+            ]
         else:
             self.analysis_period.setStyleSheet("")
 
@@ -1082,7 +1099,7 @@ class OutputsPage(ScrollableForm):
     def _on_calc_finished(self, results, all_data, lcc_breakdown):
         self._stop_timers()
         self._has_results = True
-        self._last_all_data    = all_data
+        self._last_all_data = all_data
         self._last_lcc_breakdown = lcc_breakdown
         self._show_calculation_success(results)
         self.calculation_completed.emit()

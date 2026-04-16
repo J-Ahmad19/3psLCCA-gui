@@ -80,7 +80,7 @@ def create_bar_chart(
     total_lcca = sum(values)
     ax.text(
         0.5, 1.12,
-        f"TOTAL LIFE CYCLE COST (NPV): {total_lcca:,.2f} Million {currency}",
+        f"Total Life cycle cost (year): {total_lcca:,.2f} Million {currency}",
         transform=ax.transAxes,
         ha="center", va="bottom",
         fontsize=12, fontweight="bold",
@@ -161,6 +161,5 @@ def create_bar_chart(
     for i, tick_lbl in enumerate(ax.get_xticklabels()):
         tick_lbl.set_color(tick_color_map.get(i, text_color))
 
-    plt.tight_layout()
-    plt.subplots_adjust(bottom=0.40, top=0.82)
+    fig.subplots_adjust(bottom=0.40, top=0.82)
     return fig, bars

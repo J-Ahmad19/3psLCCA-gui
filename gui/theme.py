@@ -20,7 +20,7 @@ Migration reference - old constant → new get_token() call
     MUTED             → get_token("text_disabled")
     PLACEHOLDER       → get_token("text_secondary")
     VALIDATION_ERROR  → get_token("danger")
-    BORDER            → get_token("surface_mid")
+    BORDER            → get_token("border")
     CARD_BG / WHITE   → get_token("base")
     BODY_BG           → get_token("window")
     BODY_COLOR        → get_token("text")
@@ -61,8 +61,9 @@ FS_XS   =  7   # badge pill, tertiary hint
 FS_SM   =  8   # caption, overline label, sort buttons
 FS_BASE =  9   # body text, standard buttons
 FS_MD   = 10   # sidebar row name, banner label
-FS_LG    = 11   # grid card title
-FS_XL    = 15   # logo / brand mark
+FS_LG      = 11   # grid card title
+FS_SUBHEAD = 16   # content-area section heading, group divider
+FS_XL      = 15   # logo / brand mark
 FS_DISP  = 18   # greeting display heading
 FS_DISP_LG = 22 # prominent card values
 FS_DISP_XL = 32 # extra large dashboard highlights
