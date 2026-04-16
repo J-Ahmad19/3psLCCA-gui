@@ -23,19 +23,20 @@ channel:
   - conda-forge
   - defaults
   - osdag
+  - zehen-249
 
 requirements:
   build:
-    - python>=3.10
+    - python>=3.10,<3.13
     - setuptools
     - pip
   host:
     - setuptools
     - pip
-    - python>=3.10
+    - python>=3.10,<3.13
   run:
-    - python>=3.10
-    - PySide6
+    - python>=3.10,<3.13
+    - pyside6<6.10
     - psutil
     - Pillow
     - matplotlib
@@ -44,12 +45,15 @@ requirements:
     - openpyxl
     - PyYAML
     - pylatex
+    - three-ps-lcca-core
+    - osdag_latex_env
 
-# about:
-#   summary: A Python package for performing life cycle cost analysis (LCCA) on three primary steel design options: hot-rolled, cold-formed, and built-up steel sections. This package provides tools and functions to evaluate the economic performance of these steel design options over their entire life cycle, including initial costs, maintenance costs, and end-of-life costs. It is designed to assist engineers and decision-makers in selecting the most cost-effective steel design option for their projects.
-#   keywords: steel design, life cycle analysis, engineering
-#   license: LGPL-3.0-only
-#   license_family: LGPL
-#   home: https://osdag.fossee.in
-#   dev_url: https://github.com/swas02/3psLCCA-gui
-#   doc_url: https://github.com/swas02/3psLCCA-gui
+about:
+  summary: >-
+    A Python package for performing life cycle cost analysis (LCCA) on three
+    primary steel design options: hot-rolled, cold-formed, and built-up steel
+    sections. This package provides tools and functions to evaluate the economic
+    performance of these steel design options over their entire life cycle,
+    including initial costs, maintenance costs, and end-of-life costs. It is
+    designed to assist engineers and decision-makers in selecting the most
+    cost-effective steel design option for their projects.
