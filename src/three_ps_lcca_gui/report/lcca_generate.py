@@ -73,8 +73,20 @@ from three_ps_lcca_gui.report.lcca_template import (
 )
 
 
+try:
+    from osdag_latex_env import OsdagLatexEnv
+except ImportError:
+    OsdagLatexEnv = None  
+
 
 class LCCAReportLatex(Document):
+    try:
+        osdag_latex = OsdagLatexEnv() if OsdagLatexEnv else None
+    except Exception:
+        print("Warning: Failed to initialize osdag_latex_env. Falling back to system pdflatex.")
+        osdag_latex = None
+
+    LATEX_EXEC = str(getattr(osdag_latex, "pdflatex", "pdflatex"))
 
 
     def __init__(self):
@@ -94,7 +106,6 @@ class LCCAReportLatex(Document):
         self.packages.append(Package("needspace"))
         self.packages.append(Package("longtable"))
         self.packages.append(Package("array"))
-        self.packages.append(Package("chngcntr"))
         self.packages.append(Package("amsmath"))
         self.packages.append(Package("xcolor", options=["table"]))
         self.packages.append(Package("colortbl"))
@@ -113,8 +124,8 @@ class LCCAReportLatex(Document):
 \renewcommand{\arraystretch}{1.2}
 \setlength{\tabcolsep}{5pt}
 \pagestyle{plain}
-\counterwithin{table}{section}
-\counterwithin{figure}{section}
+\numberwithin{table}{section}
+\numberwithin{figure}{section}
 \renewcommand{\thetable}{\thesection-\arabic{table}}
 \renewcommand{\thefigure}{\thesection-\arabic{figure}}
 """))
@@ -1726,25 +1737,38 @@ IETC = SCC \times \sum_{j=1}^{o} \left[ Q_{j} \times Di_{j} \times (EF_{tp})_{j}
         print("[INFO]: Generating report...")
         import os as _os
         _orig_cwd = _os.getcwd()
+        compile_ok = False
+        tex_saved = False
         try:
             if output_dir:
                 _os.makedirs(output_dir, exist_ok=True)
                 _os.chdir(output_dir)
+
+            expected_pdf = _os.path.abspath(f"{filename}.pdf")
             self.generate_pdf(
                 filename,
                 clean_tex=False,
-                compiler="pdflatex",
+                compiler=self.LATEX_EXEC,
                 compiler_args=["-interaction=nonstopmode"],
             )
+            compile_ok = True
             print(f"[INFO]: Done -> {filename}.pdf")
         except Exception as e:
-            print(f"[ERROR]: PDF compile issue: {e}")
-            self.generate_tex(filename)
-            print(f"[INFO]: TeX saved -> {filename}.tex")
-            print(f"[INFO]: Run: pdflatex {filename}.tex")
+            # Some TeX distributions return non-zero even after writing a valid PDF.
+            if _os.path.exists(expected_pdf):
+                compile_ok = True
+                print(f"[WARN]: pdflatex returned a non-zero exit code, but PDF was created.")
+                print(f"[INFO]: Done -> {filename}.pdf")
+            else:
+                print(f"[ERROR]: PDF compile issue: {e}")
+                self.generate_tex(filename)
+                tex_saved = True
+                print(f"[INFO]: TeX saved -> {filename}.tex")
+                print(f"[INFO]: Run: pdflatex {filename}.tex")
         finally:
             _os.chdir(_orig_cwd)
-            print(f"[INFO]: Run: pdflatex {filename}.tex")
+            if not compile_ok and not tex_saved:
+                print(f"[INFO]: Run: pdflatex {filename}.tex")
 
 
 

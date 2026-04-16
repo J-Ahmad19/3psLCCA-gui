@@ -388,7 +388,7 @@ class _VehicleTrafficTable(TooltipTableMixin, QTableWidget):
         self.setProperty("validationState", state)
         self.style().unpolish(self)
         self.style().polish(self)
-        self.update()
+        self.viewport().update()
 
     def sizeHint(self):
         header_h = self.horizontalHeader().height() or 35
