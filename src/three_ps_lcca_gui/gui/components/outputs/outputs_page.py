@@ -227,7 +227,7 @@ class _LCCAWorker(QObject):
             results = run_full_lcc_analysis(
                 data_object, lcc_breakdown, wpi=wpi_metadata, debug=True
             )
-            print(json.dumps({"all_data":all_data, "results":results}))
+            # print(json.dumps({"all_data":all_data, "results":results}))
             # print(results)
             self.finished.emit(results, all_data, lcc_breakdown)
         except Exception as exc:

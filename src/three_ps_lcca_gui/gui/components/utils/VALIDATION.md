@@ -85,7 +85,7 @@ WARNING_RULES = {
 ## Step 3 - Call validate_form
 
 ```python
-from gui.components.utils.validation_helpers import validate_form
+from three_ps_lcca_gui.gui.components.utils.validation_helpers import validate_form
 
 FIELDS = [...]          # your FieldDef / Section list
 WARNING_RULES = {...}   # optional

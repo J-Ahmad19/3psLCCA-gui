@@ -1,101 +1,94 @@
-# Unit System - Reference & Refactoring Plan
+# Unit System Refactoring Documentation
 
-## Overview
-
-The unit system handles everything related to physical units across the app:
-measurement unit selection (material dialog), SOR string normalization (excel importer),
-conversion factor suggestion and validation (carbon emission), and display symbols (UI widgets).
-
-It spans two source files (`definitions.py`, `unit_resolver.py`), one implicit data store
-(`CustomMaterialDB`), and is consumed by at least 8 other modules.
+This document outlines the current state of unit handling in 3psLCCA and the proposed roadmap for migrating to a centralized, file-driven unit system.
 
 ---
 
 ## Source Files
 
-### `gui/components/utils/definitions.py`
+### `three_ps_lcca_gui/gui/components/utils/definitions.py`
 
 The hardcoded data store. Every unit-related constant originates here.
 
 | Export | Type | Description |
 |--------|------|-------------|
-| `UNIT_TO_SI` | `dict[str, float]` | Maps unit code → SI equivalent (e.g. `"tonne": 1000.0` means 1 tonne = 1000 kg) |
-| `UNIT_DIMENSION` | `dict[str, str]` | Maps unit code → dimension name (e.g. `"sqm": "Area"`) |
-| `SI_BASE_UNITS` | `dict[str, str]` | Maps dimension → its SI base unit code (e.g. `"Mass": "kg"`) |
-| `UNIT_DISPLAY` | `dict[str, str]` | Maps unit code → pretty display symbol (e.g. `"sqm": "m²"`) |
-| `UNIT_TO_KG` | `dict[str, float]` | Maps unit code → kg equivalent. Separate from UNIT_TO_SI. Has extra entries (`"bag"`, `"kgs"`, `"gm"`, `"t"`) that UNIT_TO_SI lacks |
-| `ConstructionUnits` | class | Groups units by dimension with name + example strings. One method: `get_dropdown_data()` |
-| `_CONSTRUCTION_UNITS` | `ConstructionUnits` instance | Singleton used by material_dialog for grouped dropdown |
-| `UNIT_DROPDOWN_DATA` | `list[tuple]` | Flat list of `(code, name, example)` from `_CONSTRUCTION_UNITS.get_dropdown_data()` |
+| `UNIT_TO_SI` | `dict` | Canonical conversion factors to SI base (kg, m, sqm, cum, nos) |
+| `UNIT_DIMENSION` | `dict` | Dimension code for each unit |
+| `UNIT_DISPLAY` | `dict` | Human-readable symbol for each unit |
+| `SI_BASE_UNITS` | `list` | List of base unit codes |
+| `_UNIT_ALIASES` | `dict` | Mapping of SOR strings to canonical codes (e.g. `"rmt" -> "rm"`) |
+| `UNIT_TO_KG` | `dict` | Specialised mass-only conversion (redundant - see Problem 1) |
+| `ConstructionUnits` | `class` | Static grouping of units for the Material Dialog dropdown |
+| `UNIT_DROPDOWN_DATA` | `list` | Flattened list for PySide6 combo boxes |
 | `STRUCTURE_CHUNKS` | `list[tuple]` | Not unit-related. Structure section definitions |
 | `DEFAULT_VEHICLES` | `dict` | Not unit-related. Transport emission presets |
 
 ---
 
-### `gui/components/utils/unit_resolver.py`
+### `three_ps_lcca_gui/gui/components/utils/unit_resolver.py`
 
 Pure logic module. Imports data from `definitions.py`, adds alias resolution and custom unit support.
 
 #### Internal state
 
-| Name | Type | Description |
-|------|------|-------------|
-| `_custom_units_cache` | `list[dict]` | In-process cache of user-defined custom units loaded from `CustomMaterialDB` |
-| `_UNIT_ALIASES` | `dict[str, str]` | Normalises raw SOR strings to canonical unit codes. Only 11 entries - incomplete |
+| Variable | Description |
+|----------|-------------|
+| `_custom_units_cache` | In-memory list of units from `CustomMaterialDB`. Sync via `load_custom_units()` |
+| `_UNIT_ALIASES` | Local copy of aliases from definitions |
 
-#### Public functions
+#### Functions
 
 | Function | Signature | Returns | Description |
 |----------|-----------|---------|-------------|
 | `load_custom_units` | `() → None` | - | Reads `CustomMaterialDB.list_custom_units()` into `_custom_units_cache`. Call at startup and after any custom unit add/delete |
 | `get_custom_units` | `() → list[dict]` | Current cache | Returns in-process custom unit list without hitting DB |
 | `get_known_units` | `() → set[str]` | Set of strings | All recognised unit codes: `UNIT_TO_SI.keys()` ∪ `_UNIT_ALIASES.keys()`. Does NOT include custom units |
-| `get_unit_info` | `(code, custom_units=None) → (float\|None, str\|None)` | `(to_si, dimension)` | Main resolution function. Order: canonical registry → custom cache → alias fallback. Returns `(None, None)` if unknown |
-| `suggest_cf` | `(mat_code, denom_code, custom_units=None) → float\|None` | CF or None | Suggests conversion factor between two unit codes. Returns `mat_si / denom_si` if same dimension, `None` if different dimensions or unknown |
+| `get_unit_info` | `(code, custom_units=None) → (float|None, str|None)` | `(to_si, dimension)` | Main resolution function. Order: canonical registry → custom cache → alias fallback. Returns `(None, None)` if unknown |
+| `suggest_cf` | `(mat_code, denom_code, custom_units=None) → float|None` | CF or None | Suggests conversion factor between two unit codes. Returns `mat_si / denom_si` if same dimension, `None` if different dimensions or unknown |
 | `analyze_conversion_sympy` | `(mat_unit, carbon_unit_denom, conv_factor, custom_units=None) → dict` | Analysis dict | Full CF plausibility analysis. Returns `{kg_factor, is_suspicious, comment, debug_dim_match}` |
-| `validate_cf_simple` | `(mat_unit, carbon_unit_denom, cf) → dict` | `{sus, suggest}` | Quick plausibility check. Returns `{sus: bool, suggest: str\|None}` |
+| `validate_cf_simple` | `(mat_unit, carbon_unit_denom, cf) → dict` | `{sus, suggest}` | Quick plausibility check. Returns `{sus: bool, suggest: str|None}` |
 
 ---
 
 ## Who Calls What
 
 ### `load_custom_units()`
-- `gui/main.py` - called once at app startup
-- `gui/components/structure/widgets/material_dialog.py` - called after user saves a new custom unit
+- `three_ps_lcca_gui/gui/main.py` - called once at app startup
+- `three_ps_lcca_gui/gui/components/structure/widgets/material_dialog.py` - called after user saves a new custom unit
 
 ### `get_custom_units()`
-- `gui/components/structure/widgets/material_dialog.py` - populates "Custom" section in unit dropdown; checks for duplicate symbols on add
+- `three_ps_lcca_gui/gui/components/structure/widgets/material_dialog.py` - populates "Custom" section in unit dropdown; checks for duplicate symbols on add
 
 ### `get_known_units()`
-- `gui/components/structure/excel_importer.py` (lines 381, 392) - validates unit strings during SOR Excel import
+- `three_ps_lcca_gui/gui/components/structure/excel_importer.py` (lines 381, 392) - validates unit strings during SOR Excel import
 
 ### `get_unit_info()`
-- `gui/components/structure/excel_importer.py` (line 474) - resolves each SOR item's unit string during import
+- `three_ps_lcca_gui/gui/components/structure/excel_importer.py` (line 474) - resolves each SOR item's unit string during import
 - Called internally by `suggest_cf`, `analyze_conversion_sympy`, `validate_cf_simple`
 
 ### `analyze_conversion_sympy()`
-- `gui/components/carbon_emission/widgets/material_emissions.py` - checks whether stored conversion factor is plausible when displaying emission data
+- `three_ps_lcca_gui/gui/components/carbon_emission/widgets/material_emissions.py` - checks whether stored conversion factor is plausible when displaying emission data
 
 ### `UNIT_TO_SI`
-- `gui/components/utils/unit_resolver.py` - core lookup table
-- `gui/components/structure/widgets/material_dialog.py` - `_get_unit_info()`, duplicate symbol check
+- `three_ps_lcca_gui/gui/components/utils/unit_resolver.py` - core lookup table
+- `three_ps_lcca_gui/gui/components/structure/widgets/material_dialog.py` - `_get_unit_info()`, duplicate symbol check
 
 ### `UNIT_DIMENSION`
-- `gui/components/utils/unit_resolver.py` - dimension comparison
-- `gui/components/carbon_emission/widgets/transport_emissions.py` - filters unit dropdown by dimension
-- `gui/components/carbon_emission/widgets/transport_dialog.py` - same
+- `three_ps_lcca_gui/gui/components/utils/unit_resolver.py` - dimension comparison
+- `three_ps_lcca_gui/gui/components/carbon_emission/widgets/transport_emissions.py` - filters unit dropdown by dimension
+- `three_ps_lcca_gui/gui/components/carbon_emission/widgets/transport_dialog.py` - same
 
 ### `SI_BASE_UNITS`
-- `gui/components/utils/unit_resolver.py` - imported but not directly used in functions (available for callers)
+- `three_ps_lcca_gui/gui/components/utils/unit_resolver.py` - imported but not directly used in functions (available for callers)
 
 ### `UNIT_DISPLAY`
-- `gui/components/carbon_emission/widgets/material_emissions.py` - formats unit symbol in emission display
-- `gui/components/structure/widgets/base_table.py` - shows unit column symbol in material table
-- `gui/components/carbon_emission/widgets/transport_dialog.py` - unit symbol in transport form
-- `gui/components/recycling/main.py` - unit symbol in recycling panel
+- `three_ps_lcca_gui/gui/components/carbon_emission/widgets/material_emissions.py` - formats unit symbol in emission display
+- `three_ps_lcca_gui/gui/components/structure/widgets/base_table.py` - shows unit column symbol in material table
+- `three_ps_lcca_gui/gui/components/carbon_emission/widgets/transport_dialog.py` - unit symbol in transport form
+- `three_ps_lcca_gui/gui/components/recycling/main.py` - unit symbol in recycling panel
 
 ### `_CONSTRUCTION_UNITS` / `UNIT_DROPDOWN_DATA`
-- `gui/components/structure/widgets/material_dialog.py` - builds the grouped unit dropdown
+- `three_ps_lcca_gui/gui/components/structure/widgets/material_dialog.py` - builds the grouped unit dropdown
 
 ---
 

@@ -1,9 +1,9 @@
 """
-gui/themes/__init__.py - Theme registry.
+three_ps_lcca_gui/gui/themes/__init__.py - Theme registry.
 
 Directory layout
 ----------------
-gui/themes/
+three_ps_lcca_gui/gui/themes/
     light/
         soft_light.yml  Catppuccin Latte (built-in)
         <custom>.yml    drop any .yml here to add your own light theme
@@ -66,7 +66,7 @@ ACTIVE_DARK: str = "dracula"  # built-in: "default" | "dracula"
 APPEARANCE_MODE: str = "auto"  # "auto" | "light" | "dark"
 # ──────────────────────────────────────────────────────────────────────────
 
-_PKG = "gui.themes"
+_PKG = "three_ps_lcca_gui.gui.themes"
 _THEMES_DIR = Path(__file__).parent
 # Absolute path - works regardless of working directory (e.g. when a project is open)
 _QSS_PATH = os.path.join(
@@ -85,7 +85,7 @@ _active_state: dict[str, float] = {}
 
 # ── Hardcoded fallback themes - system NEVER fails even if all YAMLs are gone ──
 #
-# Light fallback: brand green palette (matches gui/theme.py constants)
+# Light fallback: brand green palette (matches three_ps_lcca_gui/gui/theme.py constants)
 _FALLBACK_LIGHT: dict = {
     "name": "Soft Light",
     "palette": {
@@ -357,7 +357,7 @@ def _load(variant: str, name: str) -> tuple[QPalette, dict[str, str], dict[str, 
 
     Resolution order:
       1. <themes_dir>/<variant>/<name>.yml  - preferred declarative format
-      2. gui.themes.<variant>.<name>        - legacy .py module fallback
+      2. three_ps_lcca_gui.gui.themes.<variant>.<name>        - legacy .py module fallback
       3. Hardcoded fallback                 - if file missing, corrupt, or schema mismatch
     """
     # 1. YAML

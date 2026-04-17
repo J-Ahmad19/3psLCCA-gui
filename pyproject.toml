@@ -35,3 +35,6 @@ readme = "README.md"
 license = {file = "LICENSE"}
 keywords = ["steel design", "life cycle analysis", "engineering"]
 
+[project.scripts]
+three-ps-lcca-gui = "three_ps_lcca_gui.gui.main:main"
+
