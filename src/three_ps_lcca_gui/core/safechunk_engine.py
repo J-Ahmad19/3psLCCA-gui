@@ -27,6 +27,7 @@ import psutil
 import re
 import zlib
 import functools
+import platformdirs
 from pathlib import Path
 from typing import Optional, Callable
 
@@ -117,6 +118,39 @@ class SafeChunkEngine:
     """
 
     VERSION = ENGINE_VER
+    APP_NAME: str = None
+    APP_AUTHOR: str = None
+
+    @staticmethod
+    def get_default_base_dir(
+        use_local: bool = False,
+        app_name: str = None,
+        app_author: str = None,
+    ) -> str:
+        """
+        Returns the default base directory for projects.
+        use_local=True:  Returns "user_projects" (relative to current directory).
+        use_local=False: Returns platform-specific AppData path (via platformdirs).
+        """
+        if use_local:
+            return "user_projects"
+
+        # Resolve defaults
+        name = app_name or SafeChunkEngine.APP_NAME
+        author = app_author or SafeChunkEngine.APP_AUTHOR
+
+        if not name or not author:
+            # Fallback for safety: if not configured, use local folder instead of crashing
+            # But log a warning so developer knows they forgot to configure it.
+            print(
+                "WARNING: SafeChunkEngine.APP_NAME/AUTHOR not set. "
+                "Defaulting to local 'user_projects' folder."
+            )
+            return "user_projects"
+
+        # Standard AppData path
+        path = platformdirs.user_data_dir(name, author)
+        return os.path.join(path, "user_projects")
 
     def __init__(
         self,
@@ -125,7 +159,7 @@ class SafeChunkEngine:
         app_version: str = "1.0.0",
         debounce_delay: float = 1.0,
         force_save_delay: float = 2.0,
-        base_dir: str = "user_projects",
+        base_dir: str = None,
         readable: bool = False,
         optimize: bool = True,
     ):
@@ -135,7 +169,12 @@ class SafeChunkEngine:
         self.app_version = app_version
         self.debounce_delay = debounce_delay
         self.force_save_delay = force_save_delay
+
+        # ── Resolve base_dir ──────────────────────────────────────────────────
+        if base_dir is None:
+            base_dir = self.get_default_base_dir()
         self.base_dir_path = Path(base_dir).resolve()
+        
         self.readable = readable
 
         # ── Optimize mode ─────────────────────────────────────────────────────
@@ -1754,11 +1793,14 @@ class SafeChunkEngine:
         cls,
         project_id: str = None,
         display_name: str = None,
-        base_dir: str = "user_projects",
+        base_dir: str = None,
         readable: bool = False,
         **kwargs,
     ):
         """Creates a new project with a unique folder."""
+        if base_dir is None:
+            base_dir = cls.get_default_base_dir()
+        
         root = Path(base_dir)
         root.mkdir(parents=True, exist_ok=True)
 
@@ -1782,7 +1824,10 @@ class SafeChunkEngine:
             return None, f"FAILED_TO_CREATE: {e}"
 
     @classmethod
-    def open(cls, project_id, base_dir="user_projects", readable=False, **kwargs):
+    def open(cls, project_id, base_dir=None, readable=False, **kwargs):
+        if base_dir is None:
+            base_dir = cls.get_default_base_dir()
+            
         root = Path(base_dir)
         if not (root / project_id).exists():
             return None, "PROJECT_NOT_FOUND"
@@ -1816,11 +1861,14 @@ class SafeChunkEngine:
     # --------------------------------------------------------------------------
 
     @staticmethod
-    def list_all_projects(base_dir: str = "user_projects") -> list[dict]:
+    def list_all_projects(base_dir: str = None) -> list[dict]:
         """
         Lightweight scan - reads only version.json and filesystem metadata.
         Safe to call frequently from the home screen.
         """
+        if base_dir is None:
+            base_dir = SafeChunkEngine.get_default_base_dir()
+            
         root = Path(base_dir)
         if not root.exists():
             return []
@@ -1838,6 +1886,7 @@ class SafeChunkEngine:
                 "created_at": None,
                 "last_modified": None,
                 "status": "ok",
+                "base_dir": str(root),
             }
 
             # Lock status
@@ -1877,9 +1926,12 @@ class SafeChunkEngine:
     @staticmethod
     def get_project_info(
         project_id: str,
-        base_dir: str = "user_projects",
+        base_dir: str = None,
     ) -> dict | None:
         """Deep scan of a single project for the detail/info panel."""
+        if base_dir is None:
+            base_dir = SafeChunkEngine.get_default_base_dir()
+            
         root = Path(base_dir)
         item = root / project_id
         if not item.exists():
@@ -1899,6 +1951,7 @@ class SafeChunkEngine:
             "clean_close": True,
             "readable": False,
             "size_kb": 0,
+            "base_dir": str(root),
         }
 
         vf = item / "version.json"

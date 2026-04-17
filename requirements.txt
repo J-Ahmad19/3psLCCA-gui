@@ -7,4 +7,5 @@ numpy
 openpyxl
 PyYAML
 pylatex
+platformdirs
 -e ./3psLCCA-core

@@ -1,6 +1,14 @@
 import sys
 import os
 import platform
+import ctypes
+
+# ── Global App Configuration ──────────────────────────────────────────────────
+# This MUST happen before any other project imports to ensure paths are set correctly
+from three_ps_lcca_gui.gui.version import APP_NAME, APP_AUTHOR
+from three_ps_lcca_gui.core.safechunk_engine import SafeChunkEngine
+SafeChunkEngine.APP_NAME = APP_NAME
+SafeChunkEngine.APP_AUTHOR = APP_AUTHOR
 
 from PySide6.QtWidgets import (
     QApplication,
@@ -19,9 +27,9 @@ from PySide6.QtGui import QFont, QFontDatabase, QIcon
 from three_ps_lcca_gui.gui.components.splash_screen import SplashScreen
 from three_ps_lcca_gui.gui.project_manager import ProjectManager
 from three_ps_lcca_gui.gui.themes import reapply as _reapply
-import ctypes
 from three_ps_lcca_gui.gui.components.utils.unit_resolver import load_custom_units
 from three_ps_lcca_gui.gui.version import VERSION
+
 
 _GUI_DIR = os.path.abspath(os.path.dirname(__file__))
 _ASSETS_DIR = os.path.join(_GUI_DIR, "assets")
@@ -104,8 +112,9 @@ def main():
     # shows the app icon instead of the Python interpreter icon.
     if platform.system() == "Windows":
         try:
+            # Format: Organization.AppName
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-                "OSBridge.3psLCCA"
+                f"{APP_AUTHOR}.{APP_NAME}"
             )
         except Exception:
             pass

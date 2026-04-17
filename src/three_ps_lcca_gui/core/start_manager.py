@@ -8,9 +8,17 @@ Tables: user_profile, pinned_projects, recent_projects, home_preferences
 import os
 import sqlite3
 from datetime import datetime
+from pathlib import Path
+from three_ps_lcca_gui.core.safechunk_engine import SafeChunkEngine
 
-_PKG_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-_DB_PATH = os.path.join(_PKG_ROOT, "data", "user.db")
+# ── Paths ──────────────────────────────────────────────────────────────────────
+def _get_db_path() -> str:
+    """Returns the DB path, resolved at runtime to ensure SafeChunkEngine is configured."""
+    base_dir = Path(SafeChunkEngine.get_default_base_dir()).parent
+    db_path = os.path.join(base_dir, "data", "user.db")
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    return db_path
+
 
 _RECENT_LIMIT = 15
 
@@ -20,8 +28,8 @@ def _now() -> str:
 
 
 def _conn() -> sqlite3.Connection:
-    os.makedirs(os.path.dirname(_DB_PATH), exist_ok=True)
-    c = sqlite3.connect(_DB_PATH)
+    path = _get_db_path()
+    c = sqlite3.connect(path)
     c.row_factory = sqlite3.Row
     return c
 

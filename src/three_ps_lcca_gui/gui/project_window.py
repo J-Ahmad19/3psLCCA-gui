@@ -2,6 +2,7 @@ import os
 
 from PySide6.QtCore import Qt, QRect, QSize, QEvent, QPoint, QTimer
 from PySide6.QtWidgets import (
+    QApplication,
     QHBoxLayout,
     QInputDialog,
     QFileDialog,
@@ -864,12 +865,15 @@ class ProjectWindow(QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowTitle(
             f"Project Info - {info.get('display_name', self.project_id)}")
-        dlg.setMinimumWidth(360)
+        dlg.setMinimumWidth(450)
         layout = QVBoxLayout(dlg)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(12)
+
         form = QFormLayout()
-        form.setSpacing(6)
+        form.setSpacing(8)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
         rows = [
             ("Project ID",       info.get("project_id", "")),
             ("Display Name",     info.get("display_name", "")),
@@ -888,10 +892,45 @@ class ProjectWindow(QMainWindow):
             lbl = QLabel(value)
             lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
             form.addRow(f"{label}:", lbl)
+
+        # Storage Path (last row, multi-line)
+        base_dir = info.get("base_dir", "-")
+        path_lbl = QLabel(base_dir)
+        path_lbl.setWordWrap(True)
+        path_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        form.addRow("Storage Location:", path_lbl)
+
         layout.addLayout(form)
+
+        btn_box = QHBoxLayout()
+        btn_box.addStretch()
+
+        def copy_all_info():
+            try:
+                text = f"Project Info: {info.get('display_name', self.project_id)}\n"
+                text += "=" * 40 + "\n"
+                for label, value in rows:
+                    text += f"{label}: {value}\n"
+                text += f"Storage Location: {base_dir}\n"
+                QApplication.clipboard().setText(text)
+                copy_btn.setText("Copied!")
+            except Exception:
+                copy_btn.setText("Failed!")
+            
+            # Reset text after 2 seconds
+            QTimer.singleShot(2000, lambda: copy_btn.setText("Copy All"))
+
+        copy_btn = QPushButton("Copy All")
+        copy_btn.setMinimumWidth(80)
+        copy_btn.clicked.connect(copy_all_info)
+        btn_box.addWidget(copy_btn)
+
         close_btn = QPushButton("Close")
+        close_btn.setMinimumWidth(80)
         close_btn.clicked.connect(dlg.accept)
-        layout.addWidget(close_btn)
+        btn_box.addWidget(close_btn)
+        layout.addLayout(btn_box)
+
         dlg.exec()
 
     def _open_rollback_dialog(self):
