@@ -823,6 +823,7 @@ class MaterialDialog(QDialog):
         _migrate_embedded_custom_units(v)
 
         dbl = QDoubleValidator()
+        dbl.setBottom(0.0)
         dbl.setNotation(QDoubleValidator.StandardNotation)
         dbl.setDecimals(DECIMAL_PLACES)
 
@@ -1123,7 +1124,9 @@ class MaterialDialog(QDialog):
         self.recycling_perc_in = QLineEdit("" if not recov_val else fmt(recov_val))
         self.recycling_perc_in.setPlaceholderText("e.g. 90")
         self.recycling_perc_in.setMinimumHeight(32)
-        self.recycling_perc_in.setValidator(dbl)
+        perc_v = QDoubleValidator(0.0, 100.0, DECIMAL_PLACES)
+        perc_v.setNotation(QDoubleValidator.StandardNotation)
+        self.recycling_perc_in.setValidator(perc_v)
         recov_col.addWidget(self.recycling_perc_in)
         rl.addLayout(recov_col, stretch=1)
 
@@ -2138,6 +2141,13 @@ class MaterialDialog(QDialog):
                 recycle = float(self.recycling_perc_in.text() or 0)
             except ValueError:
                 scrap, recycle = 0, 0
+
+            if recycle > 100:
+                QMessageBox.critical(
+                    self, "Validation Error", "Recovery percentage cannot exceed 100%."
+                )
+                return
+
             if scrap <= 0 and recycle <= 0:
                 reply = QMessageBox.warning(
                     self,

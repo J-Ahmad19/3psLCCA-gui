@@ -372,11 +372,14 @@ class RecyclingTable(TooltipTableMixin, QTableWidget):
     def update_height(self):
         self.resizeRowsToContents()
         self.updateGeometry()
+        if hasattr(self, "_frozen_overlay"):
+            self._frozen_overlay.reposition()
+            self._frozen_overlay.sync_row_heights()
 
     def clear_rows(self):
         self.setRowCount(0)
         self._frozen_overlay.clear_rows()
-        self.updateGeometry()
+        self.update_height()
 
     def showEvent(self, event):
         super().showEvent(event)

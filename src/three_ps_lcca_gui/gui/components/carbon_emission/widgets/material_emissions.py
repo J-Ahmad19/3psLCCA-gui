@@ -435,6 +435,9 @@ class CarbonTable(TooltipTableMixin, QTableWidget):
     def update_height(self):
         self.resizeRowsToContents()
         self.updateGeometry()
+        if hasattr(self, "_frozen_overlay"):
+            self._frozen_overlay.reposition()
+            self._frozen_overlay.sync_row_heights()
 
     def set_row_style(self, row: int, color_hex: str):
         bg = QColor(color_hex)

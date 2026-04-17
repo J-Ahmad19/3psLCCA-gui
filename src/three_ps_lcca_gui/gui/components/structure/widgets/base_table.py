@@ -303,6 +303,9 @@ class StructureTableWidget(TooltipTableMixin, QTableWidget):
 
     def update_height(self):
         self.updateGeometry()
+        if hasattr(self, "_frozen_col"):
+            self._frozen_col.reposition()
+            self._frozen_col.sync_row_heights()
 
     # ------------------------------------------------------------------
     # Row management

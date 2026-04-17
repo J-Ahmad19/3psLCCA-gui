@@ -526,6 +526,9 @@ class _DetailedTable(QWidget):
         self._table.setMaximumHeight(h)
         self._table.updateGeometry()
         self.updateGeometry()
+        if hasattr(self, "_frozen_col"):
+            self._frozen_col.reposition()
+            self._frozen_col.sync_row_heights()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
