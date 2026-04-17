@@ -16,7 +16,7 @@ import getpass
 from datetime import datetime
 
 from three_ps_lcca_gui.gui.version import VERSION
-from PySide6.QtCore import Qt, QSize, QPoint, QPointF, QRect, QRectF, QTimer, Signal
+from PySide6.QtCore import Qt, QSize, QPoint, QPointF, QRect, QRectF, QTimer, Signal, QStandardPaths
 from PySide6.QtGui import QFont, QColor, QPainter, QBrush, QPen, QPalette, QPolygonF, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtSvgWidgets import QSvgWidget
@@ -1452,8 +1452,13 @@ class HomePage(QWidget):
         if self.manager.is_project_open(pid):
             QMessageBox.warning(self, "Cannot Export", "Close project first.")
             return
+        
+        # Set default directory to Documents
+        default_dir = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+        default_path = os.path.join(default_dir, f"{display}.3psLCCA")
+
         dest, _ = QFileDialog.getSaveFileName(
-            self, "Export Project", f"{display}.3psLCCA", "3psLCCA Archive (*.3psLCCA)")
+            self, "Export Project", default_path, "3psLCCA Archive (*.3psLCCA)")
         if not dest:
             return
         engine, status = SafeChunkEngine.open(pid)

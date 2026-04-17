@@ -1,6 +1,6 @@
 import os
 
-from PySide6.QtCore import Qt, QRect, QSize, QEvent, QPoint, QTimer
+from PySide6.QtCore import Qt, QRect, QSize, QEvent, QPoint, QTimer, QStandardPaths
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -830,8 +830,13 @@ class ProjectWindow(QMainWindow):
         if not self.controller.engine or not self.controller.engine.is_active():
             return
         display = self.controller.active_display_name or self.project_id
+
+        # Set default directory to Documents
+        default_dir = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+        default_path = os.path.join(default_dir, f"{display}.3psLCCA")
+
         dest, _ = QFileDialog.getSaveFileName(
-            self, "Export Project", f"{display}.3psLCCA", "3psLCCA Archive (*.3psLCCA)"
+            self, "Export Project", default_path, "3psLCCA Archive (*.3psLCCA)"
         )
         if not dest:
             return

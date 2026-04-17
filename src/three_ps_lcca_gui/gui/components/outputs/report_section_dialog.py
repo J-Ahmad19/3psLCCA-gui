@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QStyle,
 )
-from PySide6.QtCore import Qt, Signal, QThread, QSize, QRect
+from PySide6.QtCore import Qt, Signal, QThread, QSize, QRect, QStandardPaths
 from PySide6.QtGui import QPainter, QColor, QPalette
 
 from three_ps_lcca_gui.gui.themes import get_token, theme_manager
@@ -485,10 +485,14 @@ class ReportSectionDialog(QDialog):
         for char in '<>:"/\\|?*':
             default_name = default_name.replace(char, "_")
 
+        # Set default directory to Documents
+        default_dir = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+        default_path = os.path.join(default_dir, f"{default_name}.pdf")
+
         save_path, _ = QFileDialog.getSaveFileName(
             self,
             "Save PDF Report",
-            f"{default_name}.pdf",
+            default_path,
             "PDF Files (*.pdf)",
         )
         if not save_path:
@@ -569,8 +573,12 @@ class ReportSectionDialog(QDialog):
             shutil.rmtree(work_dir, ignore_errors=True)
 
         def _export():
+            # Set default directory to Documents
+            default_dir = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+            default_path = os.path.join(default_dir, "LCCA_Report.tex")
+
             dest, _ = QFileDialog.getSaveFileName(
-                dlg, "Save .tex File", "LCCA_Report.tex", "LaTeX Files (*.tex)"
+                dlg, "Save .tex File", default_path, "LaTeX Files (*.tex)"
             )
             if dest:
                 if not dest.lower().endswith(".tex"):
